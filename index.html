@@ -3316,7 +3316,7 @@ function isOneSignalConfigured() {
 }
 
 var APP_NAME = "Unit App";
-var APP_VERSION = "5.0.0";
+var APP_VERSION = "5.0.1";
 
 function isSupabaseConfigured() {
   return SUPABASE_URL.indexOf("YOUR-PROJECT") === -1 && SUPABASE_ANON_KEY.indexOf("YOUR-ANON") === -1;
@@ -4380,22 +4380,12 @@ function HomeScreen(props) {
     else if (u === "medium") { needFollowUp++; }
   });
  
-  return h("div", { className: "max-w-md mx-auto px-5 pt-8 pb-16" },
-    h("div", { className: "flex items-center gap-3.5 mb-7" },
-      h(Shield, { size: 46, uid: "home" }),
-      h("div", { className: "min-w-0 flex-1" },
-        h("div", { style: { color: C.gold }, className: "text-[10px] tracking-[0.28em] uppercase font-mono mb-0.5" }, "Battle River Unit"),
-        h("div", { className: "font-display text-[26px] leading-tight" }, "Chat Selling Script"),
-        h("div", { style: { color: C.muted }, className: "text-[13px] mt-0.5" }, "Traditional \u2014 Sell Thru Chat")
-      ),
-      h("button", {
-        onClick: props.onOpenSettings,
-        style: { color: C.muted, borderColor: C.line },
-        className: "w-9 h-9 shrink-0 rounded-full border flex items-center justify-center active:opacity-60",
-        "aria-label": "Settings"
-      }, "\u2699")
-    ),
- 
+  // The shell's AppHeader carries the shield, the eyebrow and the title
+  // for every tab, so the standalone-app header that used to live here
+  // would render a second shield and a second "Battle River Unit" right
+  // underneath the first one.
+  return h("div", { className: "max-w-md mx-auto px-5 pt-5 pb-16" },
+
     props.restoreOffer && h("div", {
       style: { background: C.surfaceAlt, borderColor: C.gold },
       className: "rounded-2xl border p-4 mb-6"
@@ -4547,12 +4537,11 @@ function HomeScreen(props) {
  
     convos.length === 0 && h("div", { style: { color: C.muted }, className: "text-sm text-center px-6 leading-relaxed mt-2" },
       "Start a conversation and the script will remember exactly where you left off with each client."),
- 
-    h("button", {
-      onClick: props.onAddAdvisor,
-      style: { color: C.muted },
-      className: "w-full mt-8 py-3 text-[13px] font-mono active:opacity-60"
-    }, "New advisor joining the team? Add them \u2192")
+    // The "add a teammate" link used to open this app's own identity
+    // screen in add-advisor mode. That screen is gone — a new advisor
+    // self-registers from the sign-in screen and the manager approves
+    // them under More > Manager tools — so the link had nowhere honest
+    // to go.
   );
 }
 
@@ -4676,21 +4665,17 @@ function NamesListScreen(props) {
     else if (u === "medium") { needFollowUp++; }
   });
  
+  // The sticky "Names List" bar duplicated the shell header's own title
+  // and, sitting directly beneath it, read as a floating card rather than
+  // a heading. The follow-up count it carried is the part worth keeping,
+  // so it moves inline above the list.
   return h("div", { className: "max-w-md mx-auto pb-16" },
-    h("div", {
-      style: { background: C.surface, borderColor: C.line, top: "env(safe-area-inset-top)" },
-      className: "px-5 pt-5 pb-4 border-b sticky top-0 z-10"
-    },
-      h("div", { className: "flex items-center justify-between" },
-        h("div", { className: "font-display text-2xl" }, "Names List"),
-        needFollowUp > 0 && h("div", {
-          style: { color: overdue > 0 ? urgencyColor("high") : C.gold },
-          className: "text-[11px] font-mono font-semibold"
-        }, needFollowUp + " need follow-up")
-      )
-    ),
- 
     h("div", { className: "px-5 pt-5" },
+
+      needFollowUp > 0 && h("div", {
+        style: { color: overdue > 0 ? urgencyColor("high") : C.gold },
+        className: "text-[11px] font-mono font-semibold mb-3"
+      }, needFollowUp + " need follow-up"),
  
       props.restoreOffer && h("div", {
         style: { background: C.surfaceAlt, borderColor: C.gold },
@@ -5866,14 +5851,21 @@ function ScriptSection(props) {
 
   if (!advisor) return null;
 
+  // Every screen below inherits its text colour from this wrapper. The
+  // pre-merge shell set it and a handful of elements — the Names heading,
+  // the Settings heading, the conversation name on the step screen, the
+  // tour slide titles — carry no colour of their own and rely on it.
+  // Without it they render in the browser default: black on near-black.
+  var WRAP = { color: C.text };
+
   var overlays = [toastEl, undoBannerEl, fabEl, quickAddSheetEl];
 
   if (screen === "onboarding") {
-    return h("div", null, h(OnboardingScreen, { onFinish: finishOnboarding }), toastEl);
+    return h("div", { style: WRAP }, h(OnboardingScreen, { onFinish: finishOnboarding }), toastEl);
   }
 
   if (screen === "settings") {
-    return h("div", null,
+    return h("div", { style: WRAP },
       h(SettingsScreen, {
         advisor: advisor, convos: convos, syncMeta: syncMeta,
         prospects: prospects, prospectSyncMeta: prospectSyncMeta,
@@ -5891,7 +5883,7 @@ function ScriptSection(props) {
   }
 
   if (screen === "names") {
-    return h("div", null,
+    return h("div", { style: WRAP },
       h(NamesListScreen, {
         prospects: prospects,
         search: namesSearch, setSearch: setNamesSearch,
@@ -5906,7 +5898,7 @@ function ScriptSection(props) {
   }
 
   if (!active) {
-    return h("div", null,
+    return h("div", { style: WRAP },
       h(HomeScreen, {
         convos: convos, newName: newName, setNewName: setNewName,
         search: search, setSearch: setSearch,
@@ -5923,7 +5915,7 @@ function ScriptSection(props) {
     );
   }
 
-  return h("div", null,
+  return h("div", { style: WRAP },
     h(StepScreen, { convo: active, onGo: goTo, onHome: goBack, onFlash: flash, onTouch: touch }),
     overlays
   );
