@@ -3316,7 +3316,7 @@ function isOneSignalConfigured() {
 }
 
 var APP_NAME = "Unit App";
-var APP_VERSION = "5.0.1";
+var APP_VERSION = "5.0.2";
 
 function isSupabaseConfigured() {
   return SUPABASE_URL.indexOf("YOUR-PROJECT") === -1 && SUPABASE_ANON_KEY.indexOf("YOUR-ANON") === -1;
@@ -5188,9 +5188,9 @@ function MoreView(props) {
     h("div", { style: { color: COLORS.slate }, className: "text-[11px] font-mono uppercase tracking-widest mb-2.5" }, "Performance"),
     h("div", { className: "space-y-2 mb-7" },
       h(MoreRow, {
-        glyph: "\u2605", label: "Rewards & awards",
-        hint: "Lanes, streaks, Medallion / Macaulay / MDRT progress",
-        onClick: function () { props.onGo("rewards"); }
+        glyph: "\u2261", label: "Team",
+        hint: "Leaderboard, today's totals and the unit's activity",
+        onClick: function () { props.onGo("team"); }
       })
     ),
 
@@ -6723,15 +6723,16 @@ function App() {
 
   // Jakob's Law caps a bottom bar at about five destinations before it
   // stops reading as navigation and starts reading as a menu. Five it is,
-  // in the order the work actually happens: talk to people, keep the list,
-  // log the day, see the team. Everything else — Rewards, Manager tools,
-  // Recruitment, backups, the tour — lives behind More, which is exactly
-  // where every phone user already looks for it.
+  // in the order the work actually happens: talk to people, keep the
+  // list, log the day, see what it earns you. Rewards sits in the bar
+  // rather than Team because it answers a question an advisor asks about
+  // their own week; Team is a comparison they look up occasionally, so it
+  // moves to More alongside Manager tools, Recruitment and backups.
   var navTabs = [
     { key: "chats", label: "Chats", icon: "chats", badge: overdueCount },
     { key: "names", label: "Names", icon: "names" },
     { key: "today", label: "Today", icon: "today" },
-    { key: "team", label: "Team", icon: "team" },
+    { key: "rewards", label: "Rewards", icon: "rewards" },
     { key: "more", label: "More", icon: "more" }
   ];
 
