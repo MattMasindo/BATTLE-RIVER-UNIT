@@ -1,0 +1,25 @@
+{
+  "name": "Battle River Unit",
+  "short_name": "Battle River",
+  "description": "Chat selling script, activity tracking, leaderboards and awards for the Battle River Unit.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0F131B",
+  "theme_color": "#0F131B",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
