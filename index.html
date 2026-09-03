@@ -991,9 +991,9 @@ function AppHeader(props) {
         type: "button",
         onClick: props.onAccount,
         "aria-label": "Account and settings",
-        style: { background: COLORS.brass, color: COLORS.parchment },
-        className: "w-9 h-9 rounded-full flex items-center justify-center font-display text-sm shrink-0 active:scale-95 transition-transform"
-      }, props.initials || "\u2699")
+        className: "w-9 h-9 rounded-full shrink-0 overflow-hidden active:scale-95 transition-transform",
+        style: { padding: 0, border: "none", background: "transparent" }
+      }, h(Avatar, { src: props.avatarSrc, name: props.avatarName, size: 36 }))
     ),
     props.children
   );
@@ -1052,6 +1052,9 @@ function AccountSheet(props) {
     onClose: props.onClose
   },
     h("div", { className: "space-y-2.5" },
+      props.onSaveAvatar && h(AvatarPicker, {
+        src: props.avatarSrc, name: advisor.name, onSave: props.onSaveAvatar
+      }),
       row("switch", "Switch advisor or role", "Sign in as someone else on this device", props.onSwitch),
       !isManager && row("mgr", "Unlock manager tools", "Needs the manager PIN", props.onManagerTools),
       props.onExport && row("export", "Export last 60 days as CSV", "Opens the export sheet in Manager view", props.onExport),
@@ -1748,6 +1751,7 @@ function AdvisorView(props) {
             leaderboard.map(function (row, i) {
               return h("div", { key: row.code, style: { borderColor: COLORS.line, background: row.code === myCode ? "rgba(255,106,61,0.07)" : "transparent" }, className: "flex items-center gap-3 px-4 py-3" },
                 h("div", { style: { background: i === 0 ? COLORS.brass : COLORS.parchment, color: i === 0 ? COLORS.parchment : COLORS.slate }, className: "font-mono text-xs w-6 h-6 rounded-full flex items-center justify-center shrink-0" }, i + 1),
+                h(Avatar, { src: (props.avatarByCode || {})[row.code], name: row.name, size: 28, background: COLORS.parchment, color: COLORS.slate }),
                 h("div", { style: { color: COLORS.ink }, className: "font-medium text-sm flex-1" }, row.name),
                 h("div", { className: "flex gap-3 font-mono text-xs", style: { color: COLORS.slate } },
                   h("span", null, (row.appts || 0) + " appt"),
@@ -2095,6 +2099,15 @@ function ManagerView(props) {
       subtitle: (r.code || "") + (r.active === false ? " \u00b7 removed from the team" : ""),
       onClose: closeSheet
     },
+      props.onSaveAvatar && h("div", { className: "mb-3" },
+        h(AvatarPicker, {
+          src: (props.avatars || {})[r.id],
+          name: r.name,
+          label: "Photo",
+          hint: "Set on " + r.name + "’s behalf. They can change it themselves too.",
+          onSave: function (url) { return props.onSaveAvatar(r.id, url); }
+        })
+      ),
       h("button", {
         onClick: function () {
           var msg = r.active === false ? "Restore " + r.name + " to the active team?" : "Remove " + r.name + " from the team? Their history stays intact and can be restored later.";
@@ -3316,7 +3329,7 @@ function isOneSignalConfigured() {
 }
 
 var APP_NAME = "Unit App";
-var APP_VERSION = "5.0.2";
+var APP_VERSION = "5.1.0";
 
 function isSupabaseConfigured() {
   return SUPABASE_URL.indexOf("YOUR-PROJECT") === -1 && SUPABASE_ANON_KEY.indexOf("YOUR-ANON") === -1;
@@ -5150,6 +5163,175 @@ function StepScreen(props) {
 // ===================== MERGED SHELL =======================
 
 // ---------------------------------------------------------------------
+// Advisor photos.
+//
+// Stored as base64 JPEG data URLs in their own table rather than as a
+// column on `advisors`, because the roster is fetched with select("*") on
+// every app open and for every leaderboard — putting image bytes there
+// would drag them into queries that only wanted names and codes.
+//
+// A phone photo is 3-5MB. Nothing is uploaded raw: every image is
+// centre-cropped to a square and re-encoded on a canvas before it goes
+// anywhere, which lands around 20KB. The database has a matching size
+// constraint, so a client that skipped this step would be rejected rather
+// than quietly filling the table.
+// ---------------------------------------------------------------------
+var AVATARS_TABLE = "advisor_avatars";
+var AVATAR_PX = 256;
+var AVATAR_MAX_CHARS = 60000;              // must match the CHECK constraint
+var AVATAR_QUALITIES = [0.82, 0.7, 0.6, 0.5];
+var AVATAR_CACHE_KEY = "br-avatars";
+
+// Reads a picked file, centre-crops it square, and re-encodes it small
+// enough to store. Steps down the JPEG quality until it fits rather than
+// failing on a large photo — a rejection the advisor can't act on ("too
+// big" — compared to what?) is worse than a slightly softer image.
+function fileToSquareDataUrl(file, size) {
+  return new Promise(function (resolve, reject) {
+    if (!file) { reject(new Error("No file chosen.")); return; }
+    if (!/^image\//.test(file.type || "")) { reject(new Error("That file isn't an image.")); return; }
+    var reader = new FileReader();
+    reader.onerror = function () { reject(new Error("Couldn't read that file.")); };
+    reader.onload = function () {
+      var img = new Image();
+      img.onerror = function () { reject(new Error("Couldn't open that image.")); };
+      img.onload = function () {
+        try {
+          var side = Math.min(img.width, img.height);
+          if (!side) { reject(new Error("That image looks empty.")); return; }
+          var canvas = document.createElement("canvas");
+          canvas.width = size; canvas.height = size;
+          var ctx = canvas.getContext("2d");
+          ctx.drawImage(img,
+            Math.floor((img.width - side) / 2), Math.floor((img.height - side) / 2), side, side,
+            0, 0, size, size);
+          for (var i = 0; i < AVATAR_QUALITIES.length; i++) {
+            var out = canvas.toDataURL("image/jpeg", AVATAR_QUALITIES[i]);
+            if (out.length <= AVATAR_MAX_CHARS) { resolve(out); return; }
+          }
+          reject(new Error("That photo is too detailed to store \u2014 try a simpler one."));
+        } catch (e) { reject(new Error("Couldn't process that image.")); }
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// Cached locally so a returning advisor sees faces on first paint rather
+// than a flash of initials while the fetch lands (rule 7 in spirit: never
+// show an empty state you already know the answer to).
+function cachedAvatars() {
+  var v = lget(AVATAR_CACHE_KEY, null);
+  return (v && typeof v === "object") ? v : {};
+}
+
+async function fetchAvatars() {
+  if (!sb) return { data: null };
+  try {
+    var res = await sb.from(AVATARS_TABLE).select("advisor_id,data_url");
+    if (res.error) return { data: null, error: res.error.message };
+    var map = {};
+    (res.data || []).forEach(function (row) { map[row.advisor_id] = row.data_url; });
+    lset(AVATAR_CACHE_KEY, map);
+    return { data: map };
+  } catch (e) { return { data: null, error: "Couldn't reach the photos." }; }
+}
+
+async function pushAvatar(advisorId, dataUrl) {
+  if (!sb) return { error: "Cloud isn't reachable." };
+  try {
+    var res = await sb.from(AVATARS_TABLE)
+      .upsert({ advisor_id: advisorId, data_url: dataUrl, updated_at: new Date().toISOString() },
+              { onConflict: "advisor_id" });
+    if (res.error) return { error: "Couldn't save that photo." };
+    return {};
+  } catch (e) { return { error: "Couldn't reach the server." }; }
+}
+
+// One circle, used everywhere an advisor appears. Falls back to initials,
+// which is what the app did before photos existed, so an advisor who
+// never sets one loses nothing.
+function Avatar(props) {
+  var size = props.size || 36;
+  var base = { width: size + "px", height: size + "px", borderRadius: "50%", flexShrink: 0 };
+  if (props.src) {
+    return h("img", {
+      src: props.src,
+      alt: props.name ? props.name + "\u2019s photo" : "Profile photo",
+      style: Object.assign({}, base, { objectFit: "cover", display: "block" })
+    });
+  }
+  return h("div", {
+    style: Object.assign({}, base, {
+      background: props.background || COLORS.brass,
+      color: props.color || COLORS.parchment,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      fontSize: Math.round(size * 0.38) + "px"
+    }),
+    className: "font-display",
+    "aria-hidden": "true"
+  }, initialsOf(props.name));
+}
+
+// RULE 13: the photo library prompt is raised by the tap on "Choose
+// photo" and nowhere else. The file input is never focused, clicked or
+// mounted-and-triggered on load.
+function AvatarPicker(props) {
+  var fileRef = useRef(null);
+  var busyState = useState(false); var busy = busyState[0], setBusy = busyState[1];
+  var msgState = useState(""); var msg = msgState[0], setMsg = msgState[1];
+  var okState = useState(true); var ok = okState[0], setOk = okState[1];
+
+  async function onChange(ev) {
+    var file = ev.target.files && ev.target.files[0];
+    ev.target.value = "";                       // so re-picking the same file still fires
+    if (!file) return;
+    setBusy(true); setMsg("");
+    try {
+      var url = await fileToSquareDataUrl(file, AVATAR_PX);
+      var res = await props.onSave(url);
+      setOk(!res || !res.error);
+      setMsg((res && res.error) ? res.error : "Photo updated.");
+    } catch (e) {
+      setOk(false);
+      setMsg(e.message || "Couldn't use that photo.");
+    }
+    setBusy(false);
+  }
+
+  return h("div", {
+    style: { background: COLORS.parchment, borderColor: COLORS.line },
+    className: "rounded-2xl border px-4 py-3.5"
+  },
+    h("div", { className: "flex items-center gap-3" },
+      h(Avatar, { src: props.src, name: props.name, size: 52 }),
+      h("div", { className: "min-w-0 flex-1" },
+        h("div", { style: { color: COLORS.ink }, className: "text-sm font-medium" }, props.label || "Profile photo"),
+        h("div", { style: { color: COLORS.slate }, className: "text-[11px] mt-0.5 leading-relaxed" },
+          props.hint || "Shown in the header and on the leaderboard.")
+      )
+    ),
+    h("input", {
+      ref: fileRef, type: "file", accept: "image/*",
+      onChange: onChange, style: { display: "none" },
+      "aria-hidden": "true", tabIndex: -1
+    }),
+    h("div", { className: "flex gap-2 mt-3" },
+      h(BusyButton, {
+        busy: busy, label: props.src ? "Change photo" : "Choose photo", busyLabel: "Processing\u2026",
+        onClick: function () { if (fileRef.current) fileRef.current.click(); }
+      })
+    ),
+    msg && h("div", {
+      style: { color: ok ? COLORS.good : COLORS.rust },
+      className: "text-[11px] mt-2"
+    }, msg)
+  );
+}
+
+
+// ---------------------------------------------------------------------
 // MoreView — the fifth destination.
 //
 // A bottom bar stops working as navigation past about five items, and
@@ -5973,6 +6155,11 @@ function App() {
   // Reported up from ScriptSection for the Chats tab badge.
   var overdueState = useState(0); var overdueCount = overdueState[0], setOverdueCount = overdueState[1];
 
+  // Advisor photos, keyed by advisor id. Seeded from the local cache so
+  // faces are on screen at first paint, then refreshed from the server.
+  var avatarState = useState(function () { return cachedAvatars(); });
+  var avatars = avatarState[0], setAvatars = avatarState[1];
+
   // How many history entries this session has pushed. Dismissing an
   // overlay pops one only if we actually created it; someone who opened a
   // deep link straight onto a sheet gets a plain state replace instead, so
@@ -6204,6 +6391,38 @@ function App() {
   useEffect(function () {
     if (myIdentity) lset("br-advisor", myIdentity);
   }, [myIdentity && myIdentity.id]);
+
+  useEffect(function () {
+    if (!myIdentity) return;
+    var cancelled = false;
+    fetchAvatars().then(function (res) {
+      if (cancelled || !res.data) return;
+      setAvatars(res.data);
+    });
+    return function () { cancelled = true; };
+  }, [myIdentity && myIdentity.id]);
+
+  // RULE 11: the new photo is on screen before the round trip finishes,
+  // and rolled back only if the write actually fails.
+  var saveAvatar = async function (advisorId, dataUrl) {
+    if (!advisorId) return { error: "No advisor selected." };
+    var previous = avatars;
+    var next = Object.assign({}, avatars);
+    next[advisorId] = dataUrl;
+    setAvatars(next);
+    lset(AVATAR_CACHE_KEY, next);
+    var res = await pushAvatar(advisorId, dataUrl);
+    if (res.error) {
+      setAvatars(previous);
+      lset(AVATAR_CACHE_KEY, previous);
+      return res;
+    }
+    return {};
+  };
+
+  // The leaderboard identifies advisors by code, the photos table by id.
+  var avatarByCode = {};
+  roster.forEach(function (r) { if (avatars[r.id]) avatarByCode[r.code] = avatars[r.id]; });
 
   function setPendingSelf(p) {
     setPendingSelfState(p);
@@ -6774,7 +6993,8 @@ function App() {
       uid: "hdr",
       eyebrow: viewEyebrow,
       title: viewTitle,
-      initials: initialsOf(myIdentity.name),
+      avatarSrc: avatars[myIdentity.id],
+      avatarName: myIdentity.name,
       onHome: function () { scrollToTop(true); },
       onSearch: isManager ? function () { navigate({ sheet: "search" }, true); } : null,
       onAccount: function () { navigate({ sheet: "account" }, true); }
@@ -6843,7 +7063,8 @@ function App() {
         currentStreak: currentStreak, bestStreak: bestStreak, onAddReferral: function (name) { return addReferral(name, myCode); },
         lastSyncedAt: lastSyncedAt,
         awardProgress: awardProgress,
-        hasTeamData: teamEntries.length > 0
+        hasTeamData: teamEntries.length > 0,
+        avatarByCode: avatarByCode
       }),
       view === "manager" && isManager && h(ManagerView, {
         date: today, roster: roster, activeRoster: activeRoster, teamEntries: teamEntries, loading: teamLoading, onRefresh: loadTeamData,
@@ -6857,6 +7078,7 @@ function App() {
         onApproveAdvisor: approveAdvisor, onRejectAdvisor: rejectAdvisor,
         myCode: myCode,
         awardProgress: awardProgress,
+        avatars: avatars, onSaveAvatar: saveAvatar,
         route: route, navigate: navigate, closeSheet: closeSheet,
         onAddManagerSubmission: function(advisorCode, serial, clientName, amount, nbAc, submittedDate, settledDate) {
           return addManagerSubmission(advisorCode, serial, clientName, amount, nbAc, submittedDate, settledDate);
@@ -6894,6 +7116,8 @@ function App() {
 
     !showOnboarding && !pendingSelf && openSheet === "account" && h(AccountSheet, {
       advisor: myIdentity, isManager: isManager, isRecruitment: isRecruitment,
+      avatarSrc: avatars[myIdentity.id],
+      onSaveAvatar: function (url) { return saveAvatar(myIdentity.id, url); },
       onClose: closeSheet,
       onSwitch: function () { navigate({ sheet: null }, false); setSwitching(true); },
       onManagerTools: function () { navigate({ sheet: null }, false); setShowManagerGate(true); },
