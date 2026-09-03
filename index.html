@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="theme-color" content="#0F131B" />
 <meta name="description" content="Battle River Unit — chat selling script, activity tracking, leaderboards and awards in one app." />
-
+ 
 <!-- Add to Home Screen. The linked manifest is not optional: iOS 16.4+
      refuses web push unless a manifest declaring display:standalone is
      linked from the page that registers it. -->
@@ -17,10 +17,11 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTA4Ij4KICA8ZGVmcz4KICAgIDxjbGlwUGF0aCBpZD0iYyI+CiAgICAgIDxwYXRoIGQ9Ik01MCA4IEw4NiAyMCBWNTggQzg2IDgwIDY5IDk0IDUwIDEwMiBDMzEgOTQgMTQgODAgMTQgNTggVjIwIFoiLz4KICAgIDwvY2xpcFBhdGg+CiAgPC9kZWZzPgogIDxwYXRoIGQ9Ik01MCAyIEw5NCAxNiBWNTggQzk0IDg0IDc0IDEwMSA1MCAxMDggQzI2IDEwMSA2IDg0IDYgNTggVjE2IFoiIGZpbGw9IiMwMDIwNDAiLz4KICA8ZyBjbGlwLXBhdGg9InVybCgjYykiPgogICAgPHJlY3QgeD0iMTAiIHk9IjQiIHdpZHRoPSI4MCIgaGVpZ2h0PSIxMDQiIGZpbGw9IiNGMEIwNDAiLz4KICAgIDxjaXJjbGUgY3g9IjUwIiBjeT0iMzIiIHI9IjE2IiBmaWxsPSIjRkZGNkRDIi8+CiAgICA8cGF0aCBkPSJNMTAgNjAgUTI4IDM4IDQ0IDU0IFE1NiAzOCA3MCA1MiBRODIgNDQgOTAgNTggTDkwIDEwNCBMMTAgMTA0IFoiIGZpbGw9IiNDNDc2MUEiLz4KICAgIDxwYXRoIGQ9Ik0xMCA3NCBRMjYgNTggNDAgNzAgUTU0IDU2IDY2IDcwIFE4MCA2MiA5MCA3NiBMOTAgMTA0IEwxMCAxMDQgWiIgZmlsbD0iIzlFNTYwRSIvPgogICAgPHBhdGggZD0iTTY0IDEwNCBRNzAgODYgODQgNzYgUTg5IDcyIDkwIDcwIEw5MCAxMDQgWiIgZmlsbD0iIzAwMjA0MCIvPgogICAgPHBhdGggZD0iTTUwIDY2IEM1NiA3NiA0MiA4MiA0NiA5MCBDNDkgOTcgMzQgOTkgMzIgMTA0IEw2NiAxMDQgQzY0IDk2IDY4IDg2IDU5IDgwIEM1MiA3NCA1NyA3MCA1NCA2NiBaIiBmaWxsPSIjRkZGNkRDIi8+CiAgPC9nPgogIDxwYXRoIGQ9Ik01MCA4IEw4NiAyMCBWNTggQzg2IDgwIDY5IDk0IDUwIDEwMiBDMzEgOTQgMTQgODAgMTQgNTggVjIwIFoiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMjA0MCIgc3Ryb2tlLXdpZHRoPSI0LjUiLz4KPC9zdmc+Cg==" />
 <link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAMAAAAKE/YAAAADAFBMVEUAIEBaVkACIT8EI0L/9tyeVg5jcH7wsED/8ODEdhpKQDICIkCfVw4FIkD97t7/9ttISkChWQ+IcUA4QkDZokCPlZrfpkCYe0DDdRnwskJLXW8MKkh2gIrs4NTw49b67Nyho6UAID/Ev7qzaBTwsEE6UGQoQVn64Km/cRjIex1ca3r46tuxsa8/RkCmXBDVjSioXxH857pyRxsLKEeFTRbGeBsTL0xteYQGIj6pqqr75bcaNVCIj5ZDV2oKKUbloTbxtUwXKDn1xGz52Jjvrz7rqDu+i1IfOlS8ubbcpUDZ0MfNx8H97MYIJ0XUzMWPdkB+h48QLUq8bxcOJDvTiSe6bRb525+xZRPurT7blC31yXbl2tD0wWQVMUz968Pg1swjPVWATBfc1Mr+9NnAvLjo3dFlcn8sQ1vOpXNDNiqNUBObVQ+kWw/sqzz3z4XinjTLgCIhLDbKfR9pdoIqLjL/9NmAio/j2c6ZnKALJDxdQCJQPCemYh3LoG0xSF9GOCmrYRJ4hIpUZHWhXBbZkStQYnLyuVIMJDzz5tjzvl7QqHjxs0a2ahXzvFm0ejyjXxiNXiTdli/OgiL41ZJ4SRr86sD87s388te4bBbRysO9iE/Xz8YXM0/747LgmjH05tlvfIXOhCT4042tYhLgxJozMTA/VGdWZnaRUhL63aNSY3Pq5c/ppTksMzdyf4bQjz+coKH2y3vRqnvW08M1S2FMOSglMDmqYBGsbSrCdBnauIz258iJTxRVRS/ewJelp6f25cTo0Kvz4sL2zH/74q/88dXh182Xm5+jpabFl2FbbXju1q/+8tH67dFqRB43ODWFjJPyu1fNzL7wr0Dk38zu2rc8NSyYUxDVsYOrax/mzKZAPDN7Shm2t7HjyKBdbHrWsoTcvJG6hUrCkVq5cRypaCXcqmnIw73emTFvUSuuZBOVmZ3m4cznpDjYoVtyUSrhtXm5nHcSL0r64a2tby727tZ7akDj38tmdX7w3bxkX1dUTzuvcjNQSTfmt3NRQC1VkYxbAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAJoElEQVR42u2dd3jTRhjGReJguaSmaZsWh8QZdkhCIIMQSCCQDSlJKISQAWGvAmkgbDrYe4+yoUDZLbODTUsHndBCoYXu3dK993hqx8b2ne6kO1uKzzx6/0M5fffz8ek7Wb57xfE+KE6FVqFVaBVahVahVWgVWoVWoVVo9qD1A/U+Bq2Patuea9O8RbjPQMe3GNqHs6n7jIh5PgBtTG/elHNVccikMKahwyJC/DmhGkUH92YUul9wBxSxXVO6dWEOumtGNCelZqFRDEF37daMI1PntlF6BqDrihuN5CiEnEzFjUYeF0L3oTe3gIobjYpDIoz1Do0pbjTyoBByshc3O1LL31o2kgR3sxByShQ3v1tuvlWr1d52+003KlIIOdmLm53YJiJu6kLIyVvcAGIKbrpCyMlY3BDEFNwUhZCTq7hhiSm4SQshJ0txkyCm4CYqhJzHxY2MmIJbuhCKQodybhEb5j+bG7Op3aaY3Gfnm93jDnUfuqE7xDl7zmqcOrsnx+AGd0OFoJFZYThUpIFVdMhAnSeKQDdqeecdiJyt6qtBqSgH0faOO0XmefmhcVeeYWVjDVqNcw1016XM0JgxtigrWYNXchb6JMx4ywktVt3m9NWIqe8cmjooGzR+jOvGWZzZkthZ+JMF4y0bdAOxacOQrJFSO4NYgAZegM7VSGslY9BVjQmgG1cxBW1YpSHRKgNL0Ic0ZOrFELS5LyH0KjM70FUaUlWxA11GDF3GDvRqYujVzEAv1pDrAivQvSige7ECvZIC+iFWoPdQQJexAh1DAR3DCvRzFNDPqSPtAXSZL+b0Q75YPXyyTs+hgJ7DzL1HETFzETs3TLnE0LnsQM8nhp7P0NetZELmZJa+I+YQQuewBG1uR8TczszUc4/F4wmYxy9m7AlTDQF0DWuPxcw/S98rmVmD1i6USuvkhVrmoMWfqVsuwiwtg9DahWL31TELtUxCa801uBoyvsasZRRaq72wCaId9MoP3x04cKA08Wo+s9CWudH1ejz9+WidQ6OvVjAAXbE3c9SozL158DyzcpXtCfvqz1N1gFIr87wKXfFgomMQRydmQjBZOTW5Zf+N0QkUN8p70JmJ0BjGzbob/m9I1CGVWOEd6MytCJjURAD77tE6jMbsdbb6trJ064oVpZXW/ylFofNLMTRxVy86aPLH6LBKtadI/qw457mVFQpC5y1PxeNszSdgtmg54rPH/a0YdP4KUZq4TFtuiDPrdJV5swTHblAKelScBE2qdRDzVuikhIijFHSlTlqzLmpLde5IIeh/iTpPXK5jCfoGnZJSoVVoFfp6gh4LBHpHUeh3gL7Gug/dFgj0mqLQrwF9bXEfej8QaJ+i0PvkWiA7AQh0WFHow0Bf592H/hoIlK0odDbQ1wvuQ6cDgdKOKch8DFwEme4+9GBwLeVblBw9F5lMpkWxRI3fArsa7D70QDDSMgriWFNCYIBNgdPWNpFsv6yuh8hrXT3vPnQ4uAD0e2LkkiPXiG0KMklhfwn05K/3YCNDZyDUKccwLipPSggKqq4+Ur4WkeixRwIEqu4pDn0K6Km/J7svQhCFOra82pUmMGkROIpNym2jfLSTVUsdDbc1IS/TIZ5Ag9sv/D7V6XomBQpGMajcZbhjE+xHP1tjfTZ2xdksQeSS/NQP6Gm6J9BPQVdiSVIAUs6c7RnkOHjcCn3mPpdWsa6lxbQtKSEhaZotwZZxFBVPAhoqH/cGYJVQUsdicjn0T91jyE6un63ETmxKABJsLZTSEsVDahvURiBWLR46INBkofkKOHTaCn0X0MhKXTJNkGHVtUA/7T3bu/UwOAKtRagDph3bBh74yAr9KJhHscgMOwl2s8sz6BeI88M6jtC/F1ihF0DZjzzzCbCbg55B9wOjZQfQ6H5BeuCUTZXSklv7oO2p71JD30/Q8AGwk2G8h9DdwHhv0kBfIYV+E+xkgqfQ66DdOSMooN8WXohIjQBnFm6Dxzs/h4EBp5IzzzxjhT4u3XA4ZXZIQ2eAEdN2E0Ovr5tcXpFstzsN7CJYhj220H7VJ4ih37f9/PmZVDuo3vmHybCbuTk01CcJmX8ZZPsFVKrmnYQG+gNeBugN0Aa2HYTQ2+0/2567T7zdDih+V1n2jc+GorYiYl7i2Bi1XbRdKyj6w7ws0IVQ2OyRJNBPO38if0mk2WVoMuQKZdqh38EeL5Ki7K13XYqwnrjcSX1nIYd2PkmIJE2Qmc8ACyhekkgOx7dwLko2AwfoBpXrITkvLoCWfSwIRJfoHhzdTSkF9PMpUOxxEsxHz8Bra95G1ZCR46C4KRNltMo4D2/cnUpW7lz0BoJ6KpwcGbyM0OECA5V7RMsdah3TG0vhZvcIrGDCZTUlKRBsxm4lOYHDehK+i/aDgxbw8tq/jIU7mDwAn9GD0GvGPgFaDZgMh9zCywwdP4Wc+i7MQrcTrgkyYC4ccFi87EY7AwUOMHNbS0+GoFzunVrDxY5L6aKAO1CEwLCgB4b6HA76dBCemXuRV8KH6QNBP3OR33Nn4hdvfnztGpwMzbFSvxy6DR3eQWia8Srqwd4gLPSHthavpgki7YxXyPHKOExIjarXz2Ch/7TVZz+hWZdRMZuuiQjLq+HCG9XjeGMBS/0YOVwYZGM/XjlvscIUYYe1I4gmRJuWBIyoFYZoWsgr6eJW0FHY5VzB5HgCC/3JA8KywaUU8Mpaz0UhDLsi7x2JeFyK0pq//BDjHKW4X17hTwiLmVqwYn+IYX7scZQR2he88s6EhW0QPacBD4GfRF+FBxG5xfVZx9eHnWLXzigTonHOwZ6JnBIf24k0+NvA148HZBiye7/hl+3QjyKQf51QjDopeghfX26b4WORjk/ZtjLy8Roh83v9kWcMDa9Pi9BJaEe6cZbb1U5nhJkRgvb6yuDr14y1AO0H6bfjR4HlzqU/0J+w/WC+vh1kjbvQrmAdpz8CID8yvSO64ewwb3j1RqRgsLd840SegHGPLA7mvWMw3AWYKyJdsPdfqkP+fX9H5N857vGBvLdckfWTcC6c/i+/rnn9ZZx/ZNNgvTf9p4c0x/r09cf+JWQi72Wn78GkLt+OD/Me73178vjgNjRG38HxPBOe6pszSN2zU0KNPDPu9WGhxQTI/kOH8Ey9J6B3aHcpA+HpMiHL+XKDeZP6i3lMZxh5Jl8joU+PRk82XHS6nuEXdnQJFdpUb2y7jmf81Sj6ghmuE2GjDunhPvESGodltcVMegjvO6/7Mb44u83sp4y8+mIlFVqFVqFVaBVahVahVWgV+rqG/h9DYZ4jTevvjAAAAABJRU5ErkJggg==" />
 <title>Battle River Unit</title>
-
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+ 
+<!-- Typography is now the OS's own UI font on every platform (San Francisco
+     on iOS/macOS, Segoe UI on Windows, Roboto on Android, Helvetica/Arial
+     as the floor). No webfont request means no font-swap flash on the
+     first paint and one less blocking round trip on a phone signal. -->
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -30,16 +31,40 @@
      see rule 13: the prompt is raised only from the digest toggle. -->
 <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
 <style>
-  body { font-family: 'Inter', sans-serif; background: #0F131B; -webkit-tap-highlight-color: transparent; }
-  .font-display { font-family: 'Space Grotesk', sans-serif; }
-  .font-mono { font-family: 'IBM Plex Mono', monospace; }
+  /* ---- Typography: one cross-platform system stack ---------------------
+     --font-ui is the stack specified for the app. --font-mono keeps the
+     tabular/eyebrow text monospaced using whatever mono face the OS
+     already ships, so number columns and tracked-out labels still line
+     up without downloading a font. */
+  :root {
+    --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI",
+               Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+                 Consolas, "Liberation Mono", monospace;
+  }
+  body { font-family: var(--font-ui); background: #0F131B; -webkit-tap-highlight-color: transparent; }
+  /* Space Grotesk was only loaded at 500+, so headings never rendered at
+     400. Pinning 600 here keeps the same heading weight now that the
+     family is the system UI face, which does ship a 400. */
+  .font-display { font-family: var(--font-ui); font-weight: 600; letter-spacing: -0.01em; }
+  .font-mono { font-family: var(--font-mono); }
+ 
+  /* ---- Top-of-screen safe area ----------------------------------------
+     The header background still runs edge to edge and up under the status
+     bar; only its CONTENT is pushed clear of the inset. env() resolves to
+     0px wherever there is no inset (Android, tablet, desktop, and iPhones
+     without a notch), so this is a plain 16px of breathing room there and
+     grows to clear the Dynamic Island on an iPhone 15 Pro Max — no device
+     detection, no breakpoints. Requires viewport-fit=cover, which the
+     viewport meta above already sets. */
+  .safe-top { padding-top: calc(env(safe-area-inset-top) + 16px); }
   @keyframes pop { 0% { transform: scale(1); } 40% { transform: scale(1.12); } 100% { transform: scale(1); } }
   .pop { animation: pop 0.4s ease; }
-
+ 
   /* Toast used by the script half. */
   @keyframes flash { 0% { opacity: 0; transform: translateY(6px); } 15% { opacity: 1; transform: translateY(0); } 85% { opacity: 1; } 100% { opacity: 0; } }
   .flash { animation: flash 1.6s ease forwards; }
-
+ 
   /* ---- Rule 7: zero-blank-screen. Skeletons, spinners, progress bars. --- */
   @keyframes shimmer { 0% { background-position: -420px 0; } 100% { background-position: 420px 0; } }
   .skel {
@@ -51,17 +76,17 @@
   .spin { animation: spin 0.7s linear infinite; }
   @keyframes indeterminate { 0% { left: -35%; width: 35%; } 60% { left: 100%; width: 35%; } 100% { left: 100%; width: 35%; } }
   .bar-indeterminate { position: absolute; top: 0; bottom: 0; border-radius: 999px; animation: indeterminate 1.15s ease-in-out infinite; }
-
+ 
   /* ---- Rule 14: bottom sheet ------------------------------------------- */
   @keyframes sheetIn { from { transform: translateY(100%); } to { transform: translateY(0); } }
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
   .sheet-in { animation: sheetIn 0.24s cubic-bezier(0.32, 0.72, 0, 1); }
   .fade-in { animation: fadeIn 0.18s ease; }
   .sheet-grab { touch-action: none; }
-
+ 
   /* Bottom tab bar is fixed, so every scrollable page reserves room for it. */
   .has-bottom-nav { padding-bottom: calc(70px + env(safe-area-inset-bottom)); }
-
+ 
   @media (prefers-reduced-motion: reduce) {
     .skel, .spin, .bar-indeterminate, .sheet-in, .fade-in, .pop, .flash { animation: none !important; }
   }
@@ -69,16 +94,16 @@
 </head>
 <body>
 <div id="root"></div>
-
+ 
 <script>
   window.SUPABASE_URL = "https://chymjohbkwopbcdssfoo.supabase.co";
   window.SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNoeW1qb2hia3dvcGJjZHNzZm9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY4ODgzMTksImV4cCI6MjEwMjQ2NDMxOX0.wzQsGd-ohaFxz9vknvRUvWXVYnUKGZOLWSumOf2_Da8";
 </script>
-
+ 
 <script>
 (function () {
 "use strict";
-
+ 
 // =====================================================================
 // BATTLE RIVER UNIT — one app.
 //
@@ -107,14 +132,14 @@
 // tracks, the payout maths, the leaderboards — are carried over
 // unchanged; none of the business logic was rewritten by this merge.
 // =====================================================================
-
+ 
 var h = React.createElement;
 var useState = React.useState,
     useEffect = React.useEffect,
     useMemo = React.useMemo,
     useRef = React.useRef,
     useLayoutEffect = React.useLayoutEffect;
-
+ 
 // --- One Supabase client for the whole app -------------------------------
 // Both halves of the codebase reference it by their own historical name,
 // so `supabaseClient` is kept as an alias rather than renaming ~40 call
@@ -123,7 +148,7 @@ var SUPABASE_URL = window.SUPABASE_URL;
 var SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY;
 var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 var supabaseClient = sb;
-
+ 
 // --- One palette ---------------------------------------------------------
 // The Dashboard's slate/brass is now the whole app's palette. The script
 // layer keeps addressing colours through its own `C` token names (52
@@ -135,7 +160,12 @@ var COLORS = {
   brass: "#F2B705", brassLight: "#F7CB55", slate: "#8891A6", rust: "#E24B4A",
   line: "#2A3244", good: "#2DD4BF", emphasis: "#FF6A3D"
 };
-
+ 
+// SVG text and a couple of inline styles can't use the .font-mono class,
+// so they read the same system monospace stack from here. Kept in sync
+// with --font-mono in the stylesheet by hand — there are only two callers.
+var MONO_STACK = 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace';
+ 
 var C = {
   bg: COLORS.parchment,
   surface: COLORS.card,
@@ -148,7 +178,7 @@ var C = {
   line: COLORS.line,
   good: COLORS.good
 };
-
+ 
 // --- One localStorage layer ----------------------------------------------
 // The script layer calls lget(key, fallback); the dashboard layer calls
 // lget(key) and expects null. This is the strict superset of both: an
@@ -160,14 +190,14 @@ function lget(k, fallback) {
   catch (e) { return fallback; }
 }
 function lset(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
-
-
+ 
+ 
 // ===================== DASHBOARD HALF =====================
 // Carried over unchanged from the Activity Dashboard: activity
 // logging, leaderboards, lanes, awards, referrals, submissions,
 // recruitment, the manager side, and the UX kit (skeletons,
 // spinners, bottom sheets, incremental paging, scroll memory).
-
+ 
 var METRICS = [
   { key: "prospecting", label: "New Prospects", short: "Prospecting", color: COLORS.slate, auto: true },
   { key: "approaching", label: "Chat Script Usage", short: "Script Usage", color: COLORS.brassLight, auto: true },
@@ -175,36 +205,36 @@ var METRICS = [
   { key: "presented", label: "Clients Presented", short: "Presented", color: COLORS.ink },
   { key: "closed", label: "Clients Closed", short: "Closed", color: COLORS.rust }
 ];
-
+ 
 function localDateStr(d) {
   var y = d.getFullYear();
   var m = String(d.getMonth() + 1).padStart(2, "0");
   var day = String(d.getDate()).padStart(2, "0");
   return y + "-" + m + "-" + day;
 }
-
+ 
 function todayStr(offset) {
   offset = offset || 0;
   var d = new Date();
   d.setDate(d.getDate() + offset);
   return localDateStr(d);
 }
-
+ 
 function startOfWeek(dateStr) {
   var d = new Date(dateStr + "T00:00:00");
   var day = d.getDay();
   d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
   return localDateStr(d);
 }
-
+ 
 function prettyDate(dateStr) {
   return new Date(dateStr + "T00:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
 }
-
+ 
 function shortDate(dateStr) {
   return new Date(dateStr + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
-
+ 
 function fmtSyncAgo(ts) {
   if (!ts) return null;
   var secs = Math.max(0, Math.round((Date.now() - ts) / 1000));
@@ -215,29 +245,29 @@ function fmtSyncAgo(ts) {
   var hrs = Math.floor(mins / 60);
   return hrs + "h ago";
 }
-
+ 
 function emptyEntry() {
   var row = { social: false, note: "", fyp: 0 };
   METRICS.forEach(function (m) { row[m.key] = 0; });
   return row;
 }
-
+ 
 function entryTotal(e) {
   if (!e) return 0;
   return METRICS.reduce(function (s, m) { return s + (e[m.key] || 0); }, 0);
 }
-
+ 
 function startOfMonth(dateStr) { return dateStr.slice(0, 7) + "-01"; }
-
+ 
 function weekdayLabel(dateStr) {
   var d = new Date(dateStr + "T00:00:00");
   return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()];
 }
-
+ 
 function isFullFunnel(e) {
   return !!e && (e.prospecting || 0) >= 1 && (e.approaching || 0) >= 1 && !!e.social;
 }
-
+ 
 function referralStatus(r) {
   if (r.retained_paid) return "Fully paid";
   if (r.retained_90) return "Retained \u2014 90 day";
@@ -245,37 +275,37 @@ function referralStatus(r) {
   if (r.contract_signed) return "Signed \u2014 contract";
   return "Referred";
 }
-
+ 
 function daysSince(isoTimestamp) {
   if (!isoTimestamp) return null;
   var then = new Date(isoTimestamp); then.setHours(0, 0, 0, 0);
   var now = new Date(); now.setHours(0, 0, 0, 0);
   return Math.round((now - then) / 86400000);
 }
-
+ 
 function referralPayout(r) {
   return (r.signed_paid ? 500 : 0) + (r.coded_paid ? 1000 : 0) + (r.retained_paid ? 1500 : 0);
 }
-
+ 
 var LANE_MINIMUMS = { grind: 15 };
-
+ 
 function laneQualifies(row, laneKey) {
   var min = LANE_MINIMUMS[laneKey];
   return !!row && (min == null || row[laneKey] >= min);
 }
-
+ 
 function qualifiedLaneLeader(rows, laneKey) {
   var top = rows.length ? rows[0] : null;
   return laneQualifies(top, laneKey) ? top : null;
 }
-
+ 
 function laneBasisText(laneKey, value) {
   if (laneKey === "grosser") return fmtPhp(value) + " settled FYP";
   if (laneKey === "pipeline") return value + " new prospects";
   if (laneKey === "grind") return value + " clients presented";
   return String(value);
 }
-
+ 
 function receivableItems(code, referrals, monthBoards) {
   var items = [];
   referrals.filter(function (r) { return r.recipient_code === code; }).forEach(function (r) {
@@ -297,18 +327,18 @@ function receivableItems(code, referrals, monthBoards) {
   });
   return items;
 }
-
+ 
 function computeReceivable(code, referrals, monthBoards) {
   var items = receivableItems(code, referrals, monthBoards);
   var confirmed = items.reduce(function (s, i) { return s + (i.kind === "confirmed" ? i.amount : 0); }, 0);
   var projected = items.reduce(function (s, i) { return s + (i.kind === "projected" ? i.amount : 0); }, 0);
   return { confirmed: confirmed, projected: projected, total: confirmed + projected, items: items };
 }
-
+ 
 function fmtPhp(n) { return "\u20b1" + Math.round(n || 0).toLocaleString(); }
-
+ 
 function delay(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
-
+ 
 async function withRetry(fn, retries) {
   retries = retries == null ? 2 : retries;
   var res = await fn();
@@ -318,7 +348,7 @@ async function withRetry(fn, retries) {
   }
   return res;
 }
-
+ 
 function launchMode() {
   try {
     if (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) return "standalone";
@@ -326,7 +356,7 @@ function launchMode() {
   } catch (e) {}
   return "browser";
 }
-
+ 
 function logEvent(eventType, advisorCode, meta) {
   try {
     sb.from("usage_events").insert({
@@ -336,13 +366,13 @@ function logEvent(eventType, advisorCode, meta) {
     }).then(function () {}, function () {});
   } catch (e) { /* telemetry must never break the app */ }
 }
-
+ 
 function nextWeekdayStr(dateStr) {
   var d = new Date(dateStr + "T00:00:00");
   do { d.setDate(d.getDate() + 1); } while (d.getDay() === 0 || d.getDay() === 6);
   return localDateStr(d);
 }
-
+ 
 function bestStreakFrom(entriesMap) {
   var dates = Object.keys(entriesMap).filter(function (d) {
     var dow = new Date(d + "T00:00:00").getDay();
@@ -356,7 +386,7 @@ function bestStreakFrom(entriesMap) {
   });
   return best;
 }
-
+ 
 function currentStreakFrom(entriesMap) {
   var count = 0, offset = 0;
   while (offset < 400) {
@@ -370,34 +400,34 @@ function currentStreakFrom(entriesMap) {
   }
   return count;
 }
-
+ 
 var WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
-
+ 
 var BADGE_LEVELS = [10, 20, 30, 45, 90];
-
+ 
 var LANES = [
   { key: "pipeline", label: "Pipeline Builder", hint: "New prospects, this month" },
   { key: "grind", label: "Grind Master", hint: "Clients presented (FNA), this month · min. 15 to qualify for the payout" },
   { key: "grosser", label: "Top Grosser", hint: "FYP settled (manager-verified), this month" }
 ];
-
+ 
 var LANE_AMOUNTS = { pipeline: 300, grind: 500, grosser: 700 };
-
+ 
 var RECRUITMENT_METRICS = [
   { key: "leads_generated", label: "Leads Generated" },
   { key: "interviews_booked", label: "Interviews Booked" },
   { key: "interviews_attended", label: "Interviews Attended" },
   { key: "interviews_noshow", label: "Interviews No-Show" }
 ];
-
+ 
 function recruitmentKpiRow(scorecard, key) {
   return (scorecard || []).filter(function (r) { return r.kpi_key === key; })[0];
 }
-
+ 
 function recruitmentWeightedScore(scorecard) {
   return (scorecard || []).reduce(function (s, row) { return s + ((row.pct_of_target || 0) * (row.weight_pct || 0) / 100); }, 0);
 }
-
+ 
 function recruitmentTier(score) {
   if (score >= 100) return { level: 5, label: "Outstanding" };
   if (score >= 90) return { level: 4, label: "Exceeds Expectations" };
@@ -405,21 +435,21 @@ function recruitmentTier(score) {
   if (score >= 60) return { level: 2, label: "Needs Improvement" };
   return { level: 1, label: "Unsatisfactory" };
 }
-
+ 
 function fmtKpiValue(row) {
   if (!row) return "\u2014";
   if (row.unit === "percent") return Math.round(row.actual_value || 0) + "%";
   if (row.unit === "days") return Math.round(row.actual_value || 0) + "d";
   return Math.round(row.actual_value || 0);
 }
-
+ 
 function fmtKpiTarget(row) {
   if (!row) return "";
   if (row.unit === "percent") return Math.round(row.target_value) + "%";
   if (row.unit === "days") return Math.round(row.target_value) + "d+ before";
   return Math.round(row.target_value) + "+";
 }
-
+ 
 async function verifyAdvisorPin(advisorId, pin) {
   try {
     var res = await sb.rpc("verify_advisor_pin", { p_advisor_id: advisorId, p_pin: pin });
@@ -432,14 +462,14 @@ async function verifyAdvisorPin(advisorId, pin) {
     return { data: { created: !!d.created } };
   } catch (e) { return { error: "Couldn't reach the server \u2014 try again." }; }
 }
-
+ 
 var UX = {
   pageSize: 12,            // rule 10 — rows added per incremental page
   prefetchMargin: "700px", // rule 10 — sentinel fires this far ABOVE the fold
   dragCloseDistance: 110,  // rule 14 — px of downward drag that dismisses
   dragCloseVelocity: 0.55  // rule 14 — px/ms flick that dismisses regardless
 };
-
+ 
 function writeRoute(route, push) {
   try {
     var url = routeToUrl(route);
@@ -447,16 +477,16 @@ function writeRoute(route, push) {
     else window.history.replaceState(route, "", url);
   } catch (e) {}
 }
-
+ 
 function draftGet(key, fallback) {
   var v = lget("br-draft-" + key);
   return (v === null || v === undefined) ? fallback : v;
 }
-
+ 
 function draftSet(key, val) { lset("br-draft-" + key, val); }
-
+ 
 function draftClear(key) { try { localStorage.removeItem("br-draft-" + key); } catch (e) {} }
-
+ 
 function useDraft(key, initial) {
   var st = useState(function () { return draftGet(key, initial); });
   var val = st[0], set = st[1];
@@ -471,7 +501,7 @@ function useDraft(key, initial) {
   function clear() { draftClear(key); set(initial); }
   return [val, setAndSave, clear];
 }
-
+ 
 function useDraftForm(key, initial) {
   function load(k, base) {
     var saved = draftGet(k, null);
@@ -493,9 +523,9 @@ function useDraftForm(key, initial) {
   function clear() { draftClear(key); set(Object.assign({}, initial)); }
   return [val, patch, clear];
 }
-
+ 
 var listMemory = {};
-
+ 
 function useIncremental(total, step, resetKey, memoryKey) {
   step = step || UX.pageSize;
   var st = useState(function () {
@@ -505,18 +535,18 @@ function useIncremental(total, step, resetKey, memoryKey) {
   var count = st[0], setCount = st[1];
   var ref = useRef(null);
   var firstRef = useRef(true);
-
+ 
   // A changed filter (search text, tab) is a new list — start it over.
   useEffect(function () {
     if (firstRef.current) { firstRef.current = false; return; }
     setCount(step);
     // eslint-disable-next-line
   }, [resetKey]);
-
+ 
   useEffect(function () {
     if (memoryKey) listMemory[memoryKey] = count;
   }, [count, memoryKey]);
-
+ 
   useEffect(function () {
     var node = ref.current;
     if (!node || count >= total) return;
@@ -545,7 +575,7 @@ function useIncremental(total, step, resetKey, memoryKey) {
     io.observe(node);
     return function () { io.disconnect(); };
   }, [count, total, step]);
-
+ 
   return {
     count: Math.min(count, total),
     hasMore: count < total,
@@ -558,16 +588,16 @@ function useIncremental(total, step, resetKey, memoryKey) {
       : h("div", { ref: ref, style: { height: "1px" } })
   };
 }
-
+ 
 var scrollMemory = {};
-
+ 
 function useScrollMemory(key, ready) {
   useEffect(function () {
     if (!ready) return;
     var remembered = scrollMemory[key];
     var target = (typeof remembered === "number" && remembered > 0) ? remembered : 0;
     var userMoved = false;
-
+ 
     // Restoring on one frame isn't enough: paged lists, fonts and charts
     // all change the document height after the first paint, and the browser
     // silently clamps a scroll past the current bottom. So we re-apply for
@@ -584,7 +614,7 @@ function useScrollMemory(key, ready) {
     requestAnimationFrame(attemptRestore);
     var settle = setTimeout(attemptRestore, 160);
     var settle2 = setTimeout(attemptRestore, 420);
-
+ 
     var ticking = false;
     function onScroll() {
       if (ticking) return;
@@ -607,12 +637,12 @@ function useScrollMemory(key, ready) {
     };
   }, [key, ready]);
 }
-
+ 
 function scrollToTop(smooth) {
   try { window.scrollTo({ top: 0, behavior: smooth === false ? "auto" : "smooth" }); }
   catch (e) { window.scrollTo(0, 0); }
 }
-
+ 
 function Skeleton(props) {
   return h("div", {
     className: "skel " + (props.className || ""),
@@ -623,7 +653,7 @@ function Skeleton(props) {
     }, props.style || {})
   });
 }
-
+ 
 function SkeletonCard(props) {
   var lines = props.lines || 3, arr = [];
   for (var i = 0; i < lines; i++) arr.push(i);
@@ -633,7 +663,7 @@ function SkeletonCard(props) {
     })
   );
 }
-
+ 
 function SkeletonList(props) {
   var n = props.rows || 4, arr = [];
   for (var i = 0; i < n; i++) arr.push(i);
@@ -650,7 +680,7 @@ function SkeletonList(props) {
     })
   );
 }
-
+ 
 function Spinner(props) {
   var s = props.size || 15;
   return h("span", {
@@ -663,7 +693,7 @@ function Spinner(props) {
     }
   });
 }
-
+ 
 function ProgressBar(props) {
   if (!props.active) return null;
   return h("div", {
@@ -672,7 +702,7 @@ function ProgressBar(props) {
     className: props.className || ""
   }, h("div", { className: "bar-indeterminate", style: { background: COLORS.brass } }));
 }
-
+ 
 function BusyButton(props) {
   var busy = !!props.busy;
   return h("button", {
@@ -687,7 +717,7 @@ function BusyButton(props) {
       : props.label
   );
 }
-
+ 
 function RoundIcon(props) {
   return h("button", {
     type: "button",
@@ -698,11 +728,11 @@ function RoundIcon(props) {
     className: "w-9 h-9 rounded-full border flex items-center justify-center text-[15px] leading-none shrink-0 active:scale-95 transition-transform"
   }, props.glyph);
 }
-
+ 
 function CloseButton(props) { return h(RoundIcon, { onClick: props.onClick, label: props.label || "Close", glyph: "\u2715" }); }
-
+ 
 function BackButton(props) { return h(RoundIcon, { onClick: props.onClick, label: props.label || "Back", glyph: "\u2190" }); }
-
+ 
 function useEscape(handler, active) {
   var ref = useRef(handler);
   ref.current = handler;
@@ -713,7 +743,7 @@ function useEscape(handler, active) {
     return function () { window.removeEventListener("keydown", onKey); };
   }, [active]);
 }
-
+ 
 function BottomSheet(props) {
   var onClose = props.onClose, onBack = props.onBack;
   var dragState = useState(0); var dragY = dragState[0], setDragY = dragState[1];
@@ -721,7 +751,7 @@ function BottomSheet(props) {
   var closingRef = useRef(false);
   var startRef = useRef(null);
   var bodyRef = useRef(null);
-
+ 
   function close() {
     if (closingRef.current) return;
     closingRef.current = true;
@@ -729,16 +759,16 @@ function BottomSheet(props) {
     setDragY(window.innerHeight);
     setTimeout(function () { onClose(); }, 190);
   }
-
+ 
   useEscape(close, true);
-
+ 
   // Freeze the feed behind the sheet so a swipe can't scroll both.
   useEffect(function () {
     var prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return function () { document.body.style.overflow = prev; };
   }, []);
-
+ 
   // A drag must never start on a control. Capturing the pointer on the
   // header retargets everything that follows to the header, which silently
   // swallows the click on the ✕ sitting inside it — the close button looks
@@ -780,10 +810,10 @@ function BottomSheet(props) {
     if (dy > UX.dragCloseDistance || (dy > 24 && dy / dt > UX.dragCloseVelocity)) close();
     else setDragY(0);
   }
-
+ 
   var dragHandlers = { onPointerDown: down, onPointerMove: move, onPointerUp: up, onPointerCancel: up };
   var backdropOpacity = Math.max(0, 0.72 - (dragY / (window.innerHeight || 800)) * 0.6);
-
+ 
   return h("div", {
     className: "fixed inset-0 z-50 flex items-end justify-center",
     role: "dialog", "aria-modal": "true", "aria-label": props.title || "Options"
@@ -829,7 +859,7 @@ function BottomSheet(props) {
     )
   );
 }
-
+ 
 function ModalShell(props) {
   useEscape(props.onClose, true);
   return h("div", {
@@ -851,14 +881,14 @@ function ModalShell(props) {
     )
   );
 }
-
+ 
 function notificationState() {
   try {
     if (typeof Notification === "undefined") return "unsupported";
     return Notification.permission;
   } catch (e) { return "unsupported"; }
 }
-
+ 
 async function requestNotificationAccess() {
   var state = notificationState();
   if (state === "unsupported") return { ok: false, message: "This browser can't show reminders." };
@@ -870,13 +900,13 @@ async function requestNotificationAccess() {
     return { ok: false, message: "No problem \u2014 the dashboard works exactly the same without reminders." };
   } catch (e) { return { ok: false, message: "Couldn't ask for permission on this browser." }; }
 }
-
+ 
 function showLocalNotification(title, body) {
   try {
     if (notificationState() === "granted") new Notification(title, { body: body, tag: "bru-reminder" });
   } catch (e) {}
 }
-
+ 
 function NavIcon(props) {
   var n = props.name, c = props.color, sw = 1.7;
   var common = { width: 21, height: 21, viewBox: "0 0 24 24", fill: "none", stroke: c, strokeWidth: sw, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" };
@@ -928,7 +958,7 @@ function NavIcon(props) {
     h("path", { d: "M17.6 14.4v5.4M20.3 17.1h-5.4" })
   );
 }
-
+ 
 function BottomNav(props) {
   var tabs = props.tabs, active = props.active, onSelect = props.onSelect;
   if (!tabs || tabs.length < 2) return null;
@@ -967,9 +997,14 @@ function BottomNav(props) {
     )
   );
 }
-
+ 
 function AppHeader(props) {
-  return h("header", { style: { background: COLORS.card }, className: "px-4 pt-5 pb-4 rounded-b-3xl" },
+  // safe-top replaces the old pt-5: the card background still runs to the
+  // physical top of the screen, but the mark, eyebrow and title start
+  // below the status bar / Dynamic Island. Content stays left-aligned on
+  // purpose — the island is centred, so a centred lockup is exactly what
+  // gets crowded.
+  return h("header", { style: { background: COLORS.card }, className: "px-4 safe-top pb-4 rounded-b-3xl" },
     h("div", { className: "flex items-center gap-3" },
       h("button", {
         type: "button",
@@ -998,14 +1033,14 @@ function AppHeader(props) {
     props.children
   );
 }
-
+ 
 function initialsOf(name) {
   var parts = String(name || "").trim().split(/\s+/).filter(Boolean);
   if (!parts.length) return "\u2699";
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
-
+ 
 function AccountSheet(props) {
   var advisor = props.advisor || {}, isManager = props.isManager;
   var permState = useState(function () { return notificationState(); });
@@ -1013,7 +1048,7 @@ function AccountSheet(props) {
   var busyState = useState(false); var busy = busyState[0], setBusy = busyState[1];
   var msgState = useState(""); var msg = msgState[0], setMsg = msgState[1];
   var okState = useState(true); var ok = okState[0], setOk = okState[1];
-
+ 
   // RULE 13: this is the ONLY path to the browser permission prompt, and
   // it is behind an explicit tap on the feature that needs it. Nothing is
   // requested on load, on sign-in, or on first render of this sheet.
@@ -1031,7 +1066,7 @@ function AccountSheet(props) {
       setMsg(res.message || "Reminders weren't enabled.");
     }
   };
-
+ 
   var row = function (key, label, detail, onClick, tone) {
     return h("button", {
       key: key, type: "button", onClick: onClick,
@@ -1045,7 +1080,7 @@ function AccountSheet(props) {
       h("span", { style: { color: COLORS.slate }, className: "shrink-0" }, "\u203a")
     );
   };
-
+ 
   return h(BottomSheet, {
     title: advisor.name || "Account",
     subtitle: (advisor.code ? "Code " + advisor.code : "") + (isManager ? " \u00b7 Manager access" : " \u00b7 Advisor"),
@@ -1058,7 +1093,7 @@ function AccountSheet(props) {
       row("switch", "Switch advisor or role", "Sign in as someone else on this device", props.onSwitch),
       !isManager && row("mgr", "Unlock manager tools", "Needs the manager PIN", props.onManagerTools),
       props.onExport && row("export", "Export last 60 days as CSV", "Opens the export sheet in Manager view", props.onExport),
-
+ 
       h("div", {
         style: { background: COLORS.parchment, borderColor: COLORS.line },
         className: "rounded-2xl border px-4 py-3.5"
@@ -1077,7 +1112,7 @@ function AccountSheet(props) {
         }),
         msg && h("div", { style: { color: ok ? COLORS.good : COLORS.rust }, className: "text-[11px] mt-2" }, msg)
       ),
-
+ 
       h("div", { style: { color: COLORS.slate }, className: "text-[10px] font-mono text-center leading-relaxed pt-2" },
         "Last synced " + (fmtSyncAgo(props.lastSyncedAt) || "\u2014"),
         h("br", null),
@@ -1085,20 +1120,20 @@ function AccountSheet(props) {
     )
   );
 }
-
+ 
 function SearchSheet(props) {
   var roster = props.roster || [], referrals = props.referrals || [];
   var qState = useState(props.initialQuery || ""); var q = qState[0], setQ = qState[1];
   var term = q.trim().toLowerCase();
-
+ 
   var advisors = !term ? [] : roster.filter(function (r) {
     return String(r.name || "").toLowerCase().indexOf(term) !== -1 || String(r.code || "").indexOf(term) !== -1;
   }).slice(0, 8);
-
+ 
   var candidates = !term ? [] : referrals.filter(function (r) {
     return String(r.candidate_name || "").toLowerCase().indexOf(term) !== -1;
   }).slice(0, 8);
-
+ 
   return h(BottomSheet, { title: "Search", subtitle: "Advisors and referral candidates", onClose: props.onClose },
     h("input", {
       value: q, autoFocus: true,
@@ -1154,7 +1189,7 @@ function SearchSheet(props) {
     )
   );
 }
-
+ 
 function Onboarding(props) {
   var roster = props.roster, onChoose = props.onChoose, onCreate = props.onCreate, onVerifyPin = props.onVerifyPin,
     cancelable = props.cancelable, onCancel = props.onCancel, onEnterRecruitment = props.onEnterRecruitment;
@@ -1168,7 +1203,7 @@ function Onboarding(props) {
     if (stack.length > 1) setStack(stack.slice(0, -1));
     else if (cancelable) onCancel();
   }
-
+ 
   var roleState = useState("advisor"); var role = roleState[0], setRole = roleState[1];
   var targetState = useState(null); var target = targetState[0], setTarget = targetState[1];
   var pinState = useState(""); var pin = pinState[0], setPin = pinState[1];
@@ -1179,7 +1214,7 @@ function Onboarding(props) {
   var newNameDraft = useDraft("signup-name", ""); var newName = newNameDraft[0], setNewName = newNameDraft[1], clearNameDraft = newNameDraft[2];
   var newCodeDraft = useDraft("signup-code", ""); var newCode = newCodeDraft[0], setNewCode = newCodeDraft[1], clearCodeDraft = newCodeDraft[2];
   var newBusyState = useState(false); var newBusy = newBusyState[0], setNewBusy = newBusyState[1];
-
+ 
   // Shared wizard chrome: ← one step back on the left, ✕ out of the flow
   // on the right, in the positions every app puts them.
   function wizardChrome(label) {
@@ -1326,7 +1361,7 @@ function Onboarding(props) {
     h("button", { onClick: popMode, style: { color: COLORS.slate }, className: "mt-5 text-sm text-center underline" }, "\u2190 Back")
   );
 }
-
+ 
 function WaitingApprovalScreen(props) {
   var pending = props.pending, onCheck = props.onCheck, onVerifyPin = props.onVerifyPin, onDone = props.onDone, onCancel = props.onCancel;
   var approvedState = useState(false); var approved = approvedState[0], setApproved = approvedState[1];
@@ -1390,7 +1425,7 @@ function WaitingApprovalScreen(props) {
     h("button", { onClick: onCancel, style: { color: COLORS.slate }, className: "mt-5 text-sm text-center underline w-full" }, "Not me \u2014 cancel")
   );
 }
-
+ 
 function ManagerGate(props) {
   var hasPin = props.hasPin, onSubmit = props.onSubmit, onClose = props.onClose;
   var pinState = useState(""); var pin = pinState[0], setPin = pinState[1];
@@ -1437,7 +1472,7 @@ function ManagerGate(props) {
     )
   );
 }
-
+ 
 function TrendChart(props) {
   var data = props.data;
   var w = 320, ht = 160, pad = 24;
@@ -1452,11 +1487,11 @@ function TrendChart(props) {
       });
     }),
     data.map(function (d, i) {
-      return h("text", { key: d.date, x: x(i), y: ht - 4, fontSize: "9", fill: COLORS.slate, textAnchor: "middle", fontFamily: "IBM Plex Mono" }, d.label);
+      return h("text", { key: d.date, x: x(i), y: ht - 4, fontSize: "9", fill: COLORS.slate, textAnchor: "middle", fontFamily: MONO_STACK }, d.label);
     })
   );
 }
-
+ 
 function BattleRiverMark(props) {
   var size = props.size || 32;
   var uid = "brm-" + (props.uid || "a");
@@ -1486,7 +1521,7 @@ function BattleRiverMark(props) {
     })
   );
 }
-
+ 
 function MedalIcon(props) {
   var earned = props.earned;
   var face = earned ? COLORS.brass : COLORS.parchment;
@@ -1500,7 +1535,7 @@ function MedalIcon(props) {
     h("path", { d: "M8.6 9.2 L10.7 11.2 L15.2 6.4", fill: "none", stroke: mark, strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round" })
   );
 }
-
+ 
 function AdvisorView(props) {
   var date = props.date, entry = props.entry, pulse = props.pulse, targets = props.targets, saveError = props.saveError,
     onBump = props.onBump, onToggleSocial = props.onToggleSocial, onNote = props.onNote,
@@ -1559,12 +1594,12 @@ function AdvisorView(props) {
   var noteVal = noteDraft[0], setNoteVal = noteDraft[1], clearNoteDraft = noteDraft[2];
   var noteHasDraft = noteVal !== null && noteVal !== undefined && noteVal !== (entry.note || "");
   var noteText = (noteVal === null || noteVal === undefined) ? (entry.note || "") : noteVal;
-
+ 
   // RULE 10: the referral list pages in ahead of the scroll instead of
   // sitting inside a fixed-height inner scroller.
   var sortedMyReferrals = myReferrals.slice().sort(function (a, b) { return daysSince(b.created_at) - daysSince(a.created_at); });
   var refInc = useIncremental(sortedMyReferrals.length, 8, "myrefs", "advisor-referrals");
-
+ 
   var maxFunnel = Math.max.apply(null, [1].concat(funnelData.map(function (f) { return f.value; })));
   var myDaysLogged = myWeekDayLabels.length;
   var totalToday = entryTotal(entry);
@@ -1633,7 +1668,7 @@ function AdvisorView(props) {
         full && h("div", { style: { background: "rgba(255,106,61,0.16)", color: COLORS.emphasis }, className: "inline-block text-[10px] font-semibold px-2.5 py-1 rounded-lg mt-2" }, "Daily pacesetter")
       )
     ),
-
+ 
       h("div", null,
       h(SectionTitle, { label: "Log today's activity" }),
       full && h("div", { style: { background: "rgba(45,212,191,0.10)", borderColor: COLORS.good, color: COLORS.good }, className: "rounded-2xl border p-3.5 text-xs mb-3 flex items-center gap-2" },
@@ -1687,7 +1722,7 @@ function AdvisorView(props) {
       ),
       h("div", { style: { color: COLORS.slate }, className: "text-center text-xs mt-4 font-mono" }, "Every tap saves instantly.")
     ),
-
+ 
       h("div", null,
       h(SectionTitle, { label: "Your Consistency" }),
       h("div", { style: { background: COLORS.card, borderColor: COLORS.line }, className: "rounded-2xl border p-4" },
@@ -1725,7 +1760,7 @@ function AdvisorView(props) {
       ),
       h("div", { style: { background: COLORS.emphasis }, className: "rounded-2xl px-4 py-3 text-white text-sm mt-3" }, socialToday + " advisor" + (socialToday !== 1 ? "s" : "") + " posted on social media today")
     ),
-
+ 
       h("div", null,
       h(SectionTitle, { label: "Today's funnel" }),
       h("div", { style: { background: COLORS.card, borderColor: COLORS.line }, className: "rounded-2xl border p-4 space-y-2.5" },
@@ -1740,7 +1775,7 @@ function AdvisorView(props) {
         })
       )
     ),
-
+ 
       h("div", null,
       h(SectionTitle, { label: "This week's leaderboard" }),
       leaderboard.length === 0
@@ -1761,7 +1796,7 @@ function AdvisorView(props) {
             })
           )
     ),
-
+ 
       h("div", null,
       h(SectionTitle, { label: "7-day trend \u2014 team totals" }),
       h("div", { style: { background: COLORS.card, borderColor: COLORS.line }, className: "rounded-2xl border p-4" },
@@ -1795,7 +1830,7 @@ function AdvisorView(props) {
       ),
       referralOwed === 0 && projectedTotal === 0 && h("div", { style: { color: COLORS.slate }, className: "text-xs mt-2" }, "Nothing confirmed yet \u2014 keep logging and referring to build this up.")
     ),
-
+ 
       h("div", null,
       h(SectionTitle, { label: "This month \u2014 three lanes" }),
       h("div", { style: { background: COLORS.card, borderColor: COLORS.line }, className: "rounded-2xl border p-4 space-y-5" },
@@ -1832,7 +1867,7 @@ function AdvisorView(props) {
         })
       )
     ),
-
+ 
       h("div", null,
       h("div", { style: { background: COLORS.card, borderColor: COLORS.line }, className: "rounded-2xl border p-4 mb-1" },
         h("div", { style: { color: COLORS.slate }, className: "text-[10px] font-mono uppercase tracking-wide mb-2" }, "My Recognition"),
@@ -1879,7 +1914,7 @@ function AdvisorView(props) {
         })()
       ),
     ),
-
+ 
       h("div", null,
       h("div", { className: "flex items-baseline justify-between mb-2.5" },
         h("span", { style: { color: COLORS.ink }, className: "font-display text-base" }, "Your growth investment"),
@@ -1923,9 +1958,9 @@ function AdvisorView(props) {
     )
     ]
   };
-
+ 
   var chosen = (sectionBlocks[section] || sectionBlocks.today).filter(Boolean);
-
+ 
   return h("div", { className: "px-5 mt-6 space-y-6" },
     h("div", { className: "flex items-center justify-between" },
       h("div", { style: { color: COLORS.slate }, className: "text-xs font-mono uppercase tracking-wide" }, prettyDate(date) + " \u00b7 " + teamCount + " logged in"),
@@ -1937,7 +1972,7 @@ function AdvisorView(props) {
     h("div", { style: { height: "8px" } })
   );
 }
-
+ 
 var TIER_META = {
   // Medallion
   "Bronze":     { ring: "#CD7F32", fill: "#8B4513", pips: 1, label: "Bronze" },
@@ -1955,7 +1990,7 @@ var TIER_META = {
   // MDRT
   "MDRT": { ring: "#4FB477", fill: "#2A7A50", pips: 1, label: "MDRT" }
 };
-
+ 
 function AwardBadge(props) {
   var tier = props.tier, size = props.size || 22;
   var meta = TIER_META[tier];
@@ -1978,7 +2013,7 @@ function AwardBadge(props) {
       x: r, y: size * 0.52,
       textAnchor: "middle", dominantBaseline: "middle",
       fontSize: size * 0.28, fontWeight: "700", fill: meta.ring,
-      fontFamily: "IBM Plex Mono, monospace", letterSpacing: "-0.5"
+      fontFamily: MONO_STACK, letterSpacing: "-0.5"
     }, meta.label),
     Array.from({ length: meta.pips }).map(function (_, i) {
       return h("circle", {
@@ -1991,7 +2026,7 @@ function AwardBadge(props) {
     })
   );
 }
-
+ 
 function topTier(awardProgress, advisorCode, awardType) {
   var ORDER = [
     "Bronze","Silver","Gold","Platinum 1","Platinum 2","Platinum 3",
@@ -2007,7 +2042,7 @@ function topTier(awardProgress, advisorCode, awardType) {
   });
   return best.current_tier || null;
 }
-
+ 
 function ManagerView(props) {
   var date = props.date, roster = props.roster, activeRoster = props.activeRoster || props.roster, teamEntries = props.teamEntries, loading = props.loading, onRefresh = props.onRefresh,
     missingToday = props.missingToday, loggedTodayCount = props.loggedTodayCount, targets = props.targets, onSaveTargets = props.onSaveTargets,
@@ -2020,7 +2055,7 @@ function ManagerView(props) {
     pendingRoster = props.pendingRoster || [], onAddAdvisor = props.onAddAdvisor,
     onApproveAdvisor = props.onApproveAdvisor, onRejectAdvisor = props.onRejectAdvisor,
     myCode = props.myCode;
-
+ 
   // RULES 6, 14 and 15: every overlay in this view is addressable in the
   // URL and dismissed by going back one history entry, so ✕, a downward
   // swipe and the hardware Back button are all literally the same action.
@@ -2032,7 +2067,7 @@ function ManagerView(props) {
   var showAddSub = openSheet === "addsub";
   var showAddAdvisor = openSheet === "addadvisor";
   var showExport = openSheet === "export";
-
+ 
   var recTabState = useState("medallion"); var recTab = recTabState[0], setRecTab = recTabState[1];
   var editState = useState(false); var editingTargets = editState[0], setEditingTargets = editState[1];
   var draftState = useState(targets); var draft = draftState[0], setDraft = draftState[1];
@@ -2040,7 +2075,7 @@ function ManagerView(props) {
   var openRecState = useState(null); var openRec = openRecState[0], setOpenRec = openRecState[1];
   var searchState = useState(route.q || ""); var search = searchState[0], setSearch = searchState[1];
   var showRemovedState = useState(false); var showRemoved = showRemovedState[0], setShowRemoved = showRemovedState[1];
-
+ 
   // A search arriving from a shared link or the header search sheet must
   // land on the filtered list, not on an unfiltered dashboard (rule 15).
   useEffect(function () {
@@ -2090,7 +2125,7 @@ function ManagerView(props) {
       )
     );
   };
-
+ 
   var selectedAdvisor = selected ? roster.filter(function (r) { return r.code === selected; })[0] : null;
   var advisorDetailSheet = selectedAdvisor ? (function (r) {
     var history = teamEntries.filter(function (e) { return e.advisor_code === r.code; }).sort(function (a, b) { return a.entry_date < b.entry_date ? 1 : -1; }).slice(0, 14);
@@ -2134,7 +2169,7 @@ function ManagerView(props) {
   })(selectedAdvisor) : null;
   var activeAdvisors = roster.filter(function (r) { return r.active !== false; });
   var removedAdvisors = roster.filter(function (r) { return r.active === false; });
-
+ 
   // ---- RULE 10: every long list in this view pages in ahead of the fold.
   var searchTerm = search.trim().toLowerCase();
   var filteredReferrals = (!searchTerm ? referrals : referrals.filter(function (r) {
@@ -2149,12 +2184,12 @@ function ManagerView(props) {
     return (bDays || 0) - (aDays || 0);
   });
   var settledSubs = submissions.filter(function (x) { return x.settled; });
-
+ 
   var refInc = useIncremental(filteredReferrals.length, 8, searchTerm, "mgr-referrals");
   var advInc = useIncremental(activeAdvisors.length, 10, roster.length, "mgr-advisors");
   var consInc = useIncremental(activeAdvisors.length, 6, roster.length, "mgr-consistency");
   var settledInc = useIncremental(settledSubs.length, 10, submissions.length, "mgr-settled");
-
+ 
   var listIsCold = !!loading && teamEntries.length === 0;
  
   // 30-day consistency grid: one cell per calendar day (oldest \u2192 today),
@@ -2235,7 +2270,7 @@ function ManagerView(props) {
         loading ? h(Spinner, { size: 11, color: COLORS.brass }) : null,
         loading ? "refreshing" : "refresh")
     ),
-
+ 
     // Jakob's Law: search sits at the top of the view and stays there.
     h("div", { className: "sticky top-0 z-30 -mx-5 px-5 pt-1 pb-2.5", style: { background: COLORS.parchment } },
       h("div", { className: "flex gap-2" },
@@ -2695,11 +2730,11 @@ function ManagerView(props) {
       )
     ),
     h("button", { onClick: function () { navigate({ sheet: "export" }, true); }, style: { borderColor: COLORS.line, color: COLORS.ink }, className: "w-full py-3 rounded-2xl border font-medium text-sm" }, "Export last 60 days as CSV"),
-
+ 
     // ---- Overlays. All four are bottom sheets: ✕, Esc, a downward swipe
     // and the Back button each dismiss exactly one of them (rules 6 + 14).
     advisorDetailSheet,
-
+ 
     showExport && h(BottomSheet, { title: "Export CSV", subtitle: "Last 60 days of activity", onClose: closeSheet },
       h("textarea", {
         readOnly: true, value: csv || "No data yet.", onFocus: function (ev) { ev.target.select(); },
@@ -2708,7 +2743,7 @@ function ManagerView(props) {
       }),
       h(CopyButton, { text: csv })
     ),
-
+ 
     showAddSub && h(BottomSheet, { title: "Add submission", subtitle: "Logged on behalf of an advisor", onClose: closeSheet },
       h(ManagerAddSubmissionForm, {
         roster: activeRoster,
@@ -2717,13 +2752,13 @@ function ManagerView(props) {
         colors: COLORS
       })
     ),
-
+ 
     showAddAdvisor && h(BottomSheet, { title: "Add advisor", subtitle: "They set their own PIN on first sign-in", onClose: closeSheet },
       h(AddAdvisorCard, { onAddAdvisor: onAddAdvisor, onDone: closeSheet })
     )
   );
 }
-
+ 
 function CopyButton(props) {
   var stateSt = useState("idle"); var state = stateSt[0], setState = stateSt[1];
   var copy = function () {
@@ -2747,7 +2782,7 @@ function CopyButton(props) {
     })
   );
 }
-
+ 
 function AddAdvisorCard(props) {
   var onAddAdvisor = props.onAddAdvisor, onDone = props.onDone;
   // RULE 12: typed-but-unsubmitted names survive closing the sheet.
@@ -2797,7 +2832,7 @@ function AddAdvisorCard(props) {
     )
   );
 }
-
+ 
 function PendingApprovalCard(props) {
   var pendingRoster = props.pendingRoster, onApprove = props.onApprove, onReject = props.onReject;
   return h("div", null,
@@ -2807,7 +2842,7 @@ function PendingApprovalCard(props) {
     )
   );
 }
-
+ 
 function PendingRow(props) {
   var r = props.row, onApprove = props.onApprove, onReject = props.onReject;
   var codeState = useState(r.code || ""); var code = codeState[0], setCode = codeState[1];
@@ -2851,7 +2886,7 @@ function PendingRow(props) {
     )
   );
 }
-
+ 
 function ForumEventCard(props) {
   var event = props.event, onSave = props.onSave;
   // RULE 12: a part-filled forum event is kept on the device until saved.
@@ -2926,7 +2961,7 @@ function ForumEventCard(props) {
     )
   );
 }
-
+ 
 function RecruitmentView(props) {
   var readOnly = !!props.readOnly, today = props.today, scorecard = props.scorecard || [], todayLog = props.todayLog, forumEvents = props.forumEvents || [],
     loading = props.loading, pulse = props.pulse, onBumpDaily = props.onBumpDaily, onSaveNote = props.onSaveNote,
@@ -2940,7 +2975,7 @@ function RecruitmentView(props) {
   var ratioFlag = !!(leadsRow && interviewsRow && leadsRow.actual_value >= leadsRow.target_value && interviewsRow.actual_value < interviewsRow.target_value);
   var showUpFlag = !!(showUpRow && showUpRow.actual_value > 0 && showUpRow.actual_value < showUpRow.target_value);
   var latestEvent = forumEvents.length ? forumEvents[0] : null;
-
+ 
   // RULE 12: the daily note is cached per day and cleared once saved.
   var noteDraft = useDraft("aces-note-" + (today || "today"), null);
   var noteVal = noteDraft[0], setNoteVal = noteDraft[1], clearNoteDraft = noteDraft[2];
@@ -3035,7 +3070,7 @@ function RecruitmentView(props) {
     )
   );
 }
-
+ 
 function SubmissionBox(props) {
   var mySubmissions = props.mySubmissions, onAddSubmission = props.onAddSubmission;
   // RULE 12: an APP serial typed but not yet submitted is never lost to a
@@ -3127,7 +3162,7 @@ function SubmissionBox(props) {
     )
   );
 }
-
+ 
 function ManagerAddSubmissionForm(props) {
   var roster = props.roster || [], onAdd = props.onAdd, onDone = props.onDone;
   // RULE 12: seven fields is exactly the kind of form nobody wants to
@@ -3204,11 +3239,11 @@ function ManagerAddSubmissionForm(props) {
     })
   );
 }
-
+ 
 function SectionTitle(props) {
   return h("div", { className: props.bare ? "" : "mb-2.5" }, h("span", { style: { color: COLORS.ink }, className: "font-display text-base" }, props.label));
 }
-
+ 
 // ---------------------------------------------------------------------
 // RULE 15 — deep linking, for the whole app rather than half of it.
 //
@@ -3238,7 +3273,7 @@ function SectionTitle(props) {
 // ---------------------------------------------------------------------
 var VIEW_KEYS = ["chats", "names", "today", "team", "rewards", "more", "manager", "recruitment"];
 var ROUTE_KEYS = ["view", "advisor", "sheet", "lane", "q", "convo", "prospect", "focus"];
-
+ 
 function parseRoute() {
   var out = { view: null, advisor: null, sheet: null, lane: null, q: null, convo: null, prospect: null, focus: null };
   try {
@@ -3248,7 +3283,7 @@ function parseRoute() {
     }
     var p = new URLSearchParams(qs);
     var v = (p.get("view") || "").toLowerCase();
-
+ 
     // ---- legacy link translation -------------------------------------
     if (v === "advisor") v = "today";            // Dashboard v3.1 and earlier
     if (v === "overdue") {                        // Script Tool daily digest push
@@ -3268,7 +3303,7 @@ function parseRoute() {
       else { v = "chats"; }
     }
     // ------------------------------------------------------------------
-
+ 
     if (VIEW_KEYS.indexOf(v) !== -1) out.view = v;
     out.advisor = p.get("advisor") || null;
     out.sheet = p.get("sheet") || out.sheet || null;
@@ -3277,7 +3312,7 @@ function parseRoute() {
     out.convo = p.get("convo") || null;
     out.prospect = p.get("prospect") || null;
     if (!out.focus) out.focus = p.get("focus") || null;
-
+ 
     // A bare ?convo= / ?prospect= (no view) is a pre-merge Script Tool
     // link. It names an entity, so it implies its own tab.
     if (!out.view && out.convo) out.view = "chats";
@@ -3285,19 +3320,19 @@ function parseRoute() {
   } catch (e) {}
   return out;
 }
-
+ 
 function routeToUrl(route) {
   var p = new URLSearchParams();
   ROUTE_KEYS.forEach(function (k) { if (route[k]) p.set(k, route[k]); });
   var s = p.toString();
   return s ? (window.location.pathname + "?" + s) : window.location.pathname;
 }
-
+ 
 // Guards the one-shot "is this ?convo= id actually on this device?" check
 // so it runs once per linked conversation, not once per render.
 var deepLinkChecked = null;
-
-
+ 
+ 
 // ===================== SCRIPT HALF ========================
 // Carried over unchanged from the Chat Selling Script Tool: the
 // 26-step flow, follow-up staleness, the Names List, both sync
@@ -3305,38 +3340,38 @@ var deepLinkChecked = null;
 // Dashboard activity auto-log.
 // daysSince() here was renamed daysSinceMs() — it takes a millisecond
 // timestamp, while the dashboard's daysSince() takes an ISO string.
-
+ 
 var ADVISOR_TABLE = "advisors";
-
+ 
 var ADVISOR_ID_COLUMN = "id";
-
+ 
 var ADVISOR_NAME_COLUMN = "name";
-
+ 
 var ADVISOR_ACTIVE_COLUMN = "active";
-
+ 
 var ADVISOR_CODE_COLUMN = "code";
-
+ 
 var ADVISOR_APPROVED_COLUMN = "approved";
-
+ 
 var CONVERSATIONS_TABLE = "conversation_backups";
-
+ 
 var PROSPECTS_TABLE = "prospect_names";
-
+ 
 var ONESIGNAL_APP_ID = "a746ba97-d94b-4a3f-bd9a-88ff89eaf7de";
-
+ 
 function isOneSignalConfigured() {
   return ONESIGNAL_APP_ID.indexOf("YOUR-ONESIGNAL") === -1;
 }
-
+ 
 var APP_NAME = "Unit App";
 var APP_VERSION = "5.1.0";
-
+ 
 function isSupabaseConfigured() {
   return SUPABASE_URL.indexOf("YOUR-PROJECT") === -1 && SUPABASE_ANON_KEY.indexOf("YOUR-ANON") === -1;
 }
-
+ 
 try { initOneSignal(); } catch (e) {}
-
+ 
 function Shield(props) {
   var size = props.size || 44;
   var uid = "brShield_" + (props.uid || "main");
@@ -3378,7 +3413,7 @@ function Shield(props) {
     })
   );
 }
-
+ 
 var STAGES = {
   approach: { label: "Initial Approach", color: C.goldSoft },
   relationship: { label: "Relationship Touch", color: C.goldSoft },
@@ -3387,7 +3422,7 @@ var STAGES = {
   presented: { label: "Client Presented", color: C.gold },
   closing: { label: "Client Closed", color: C.good }
 };
-
+ 
 var STEPS = {
   start: {
     stage: "approach",
@@ -3648,9 +3683,9 @@ var STEPS = {
     choices: [{ label: "Start a new conversation", next: "home" }]
   }
 };
-
+ 
 var FINISHED = { done: true, pass_sunlife: true };
-
+ 
 var STEP_PROGRESS = {
   start: 0,
   seen_opener: 5,
@@ -3679,14 +3714,14 @@ var STEP_PROGRESS = {
   close_payment: 100,
   done: 100
 };
-
+ 
 function scriptProgress(stepKey) {
   var v = STEP_PROGRESS[stepKey];
   return v == null ? 0 : v;
 }
-
+ 
 function daysSinceMs(ts) { return Math.floor((Date.now() - ts) / 86400000); }
-
+ 
 function fmtAgo(ts) {
   if (!ts) return "";
   var mins = Math.floor((Date.now() - ts) / 60000);
@@ -3702,7 +3737,7 @@ function fmtAgo(ts) {
   var mo = Math.floor(d / 30);
   return mo === 1 ? "1 month ago" : mo + " months ago";
 }
-
+ 
 function urgency(convo) {
   if (FINISHED[convo.step]) return "none";
   var d = daysSinceMs(convo.updated);
@@ -3710,13 +3745,13 @@ function urgency(convo) {
   if (d >= 3) return "medium";
   return "low";
 }
-
+ 
 function urgencyColor(level) {
   if (level === "high") return COLORS.rust;
   if (level === "medium") return "#F0B040";
   return "#8CA5BD";
 }
-
+ 
 function sortConvos(list, mode) {
   return list.slice().sort(function (a, b) {
     var af = FINISHED[a.step] ? 1 : 0, bf = FINISHED[b.step] ? 1 : 0;
@@ -3725,12 +3760,12 @@ function sortConvos(list, mode) {
     return b.updated - a.updated;                     // most recently touched first
   });
 }
-
+ 
 function fill(text, name) {
   var n = (name || "").trim();
   return text.replace(/\{name\}/g, n || "friend");
 }
-
+ 
 function copyText(text, done) {
   function fallback() {
     try {
@@ -3751,11 +3786,11 @@ function copyText(text, done) {
     navigator.clipboard.writeText(text).then(function () { done(true); }, fallback);
   } else { fallback(); }
 }
-
+ 
 function convosKey(advisorId) { return "br-convos-" + advisorId; }
-
+ 
 function syncMetaKey(advisorId) { return "br-sync-meta-" + advisorId; }
-
+ 
 function rosterSelectColumns() {
   var cols = [ADVISOR_ID_COLUMN, ADVISOR_NAME_COLUMN];
   if (ADVISOR_ACTIVE_COLUMN) cols.push(ADVISOR_ACTIVE_COLUMN);
@@ -3763,7 +3798,7 @@ function rosterSelectColumns() {
   if (ADVISOR_CODE_COLUMN) cols.push(ADVISOR_CODE_COLUMN);
   return cols.join(",");
 }
-
+ 
 async function fetchRoster() {
   if (!supabaseClient) return { error: "Cloud isn't configured yet." };
   try {
@@ -3779,7 +3814,7 @@ async function fetchRoster() {
     };
   } catch (e) { return { error: "Couldn't reach the advisor list." }; }
 }
-
+ 
 async function fetchAdvisorCode(advisorId) {
   if (!supabaseClient || !ADVISOR_CODE_COLUMN) return { error: "Cloud isn't configured yet." };
   try {
@@ -3788,7 +3823,7 @@ async function fetchAdvisorCode(advisorId) {
     return { data: res.data[ADVISOR_CODE_COLUMN] || null };
   } catch (e) { return { error: "Couldn't reach the advisor list." }; }
 }
-
+ 
 async function checkAdvisorApproval(advisorId) {
   if (!supabaseClient) return { error: "Cloud isn't configured yet." };
   try {
@@ -3799,7 +3834,7 @@ async function checkAdvisorApproval(advisorId) {
     return { data: { approved: approved, id: res.data[ADVISOR_ID_COLUMN], name: res.data[ADVISOR_NAME_COLUMN], code: ADVISOR_CODE_COLUMN ? res.data[ADVISOR_CODE_COLUMN] : null } };
   } catch (e) { return { error: "Couldn't reach the server — try again." }; }
 }
-
+ 
 async function addSelfAsAdvisor(name) {
   if (!supabaseClient) return { error: "Cloud isn't configured yet." };
   var nm = name.trim();
@@ -3815,21 +3850,21 @@ async function addSelfAsAdvisor(name) {
     return { data: { id: r[ADVISOR_ID_COLUMN], name: r[ADVISOR_NAME_COLUMN] } };
   } catch (e) { return { error: "Couldn't add you to the roster." }; }
 }
-
+ 
 function phTodayStr() {
   var d = new Date();
   function p(n) { return n < 10 ? "0" + n : "" + n; }
   return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
 }
-
+ 
 var PENDING_BUMPS_KEY = "br-pending-metric-bumps";
-
+ 
 function getPendingBumps() { return lget(PENDING_BUMPS_KEY, []); }
-
+ 
 function setPendingBumps(list) { lset(PENDING_BUMPS_KEY, list); }
-
+ 
 var sessionEventLogged = false;
-
+ 
 async function callBumpMetric(entry) {
   if (!supabaseClient) return false;
   try {
@@ -3837,7 +3872,7 @@ async function callBumpMetric(entry) {
     return !res.error;
   } catch (e) { return false; }
 }
-
+ 
 async function bumpDashboardMetric(code, field, delta) {
   if (!code) return { ok: false, reason: "no_code" };
   var entry = { code: code, date: phTodayStr(), field: field, delta: delta };
@@ -3845,9 +3880,9 @@ async function bumpDashboardMetric(code, field, delta) {
   if (!ok) { setPendingBumps(getPendingBumps().concat([entry])); return { ok: false, reason: "queued" }; }
   return { ok: true };
 }
-
+ 
 var bumpFlushInFlight = false;
-
+ 
 async function flushPendingBumps() {
   if (bumpFlushInFlight) return;
   if (typeof navigator !== "undefined" && navigator.onLine === false) return;
@@ -3867,7 +3902,7 @@ async function flushPendingBumps() {
     bumpFlushInFlight = false;
   }
 }
-
+ 
 function initOneSignal() {
   if (!isOneSignalConfigured()) return;
   window.OneSignalDeferred = window.OneSignalDeferred || [];
@@ -3875,7 +3910,7 @@ function initOneSignal() {
     OneSignal.init({ appId: ONESIGNAL_APP_ID });
   });
 }
-
+ 
 function getOneSignalSubscriptionId() {
   return new Promise(function (resolve) {
     if (!isOneSignalConfigured() || !window.OneSignalDeferred) { resolve(null); return; }
@@ -3885,7 +3920,7 @@ function getOneSignalSubscriptionId() {
     });
   });
 }
-
+ 
 async function enableDigestPush(advisorId) {
   if (!supabaseClient) return { error: "Cloud isn't configured yet." };
   if (!isOneSignalConfigured()) return { error: "Push isn't configured yet." };
@@ -3917,7 +3952,7 @@ async function enableDigestPush(advisorId) {
     return { data: true };
   } catch (e) { return { error: "Couldn't enable notifications \u2014 try again." }; }
 }
-
+ 
 async function disableDigestPush(advisorId) {
   if (!supabaseClient) return { error: "Cloud isn't configured yet." };
   try {
@@ -3927,7 +3962,7 @@ async function disableDigestPush(advisorId) {
     return { data: true };
   } catch (e) { return { error: "Couldn't reach the server \u2014 try again." }; }
 }
-
+ 
 async function fetchDigestOptIn(advisorId) {
   if (!supabaseClient) return { data: false };
   try {
@@ -3936,7 +3971,7 @@ async function fetchDigestOptIn(advisorId) {
     return { data: !!res.data.digest_opt_in };
   } catch (e) { return { data: false }; }
 }
-
+ 
 async function fetchCloudConvos(advisorId) {
   if (!supabaseClient) return { data: [] };
   try {
@@ -3945,7 +3980,7 @@ async function fetchCloudConvos(advisorId) {
     return { data: res.data || [] };
   } catch (e) { return { data: [], error: "Couldn't reach the backup." }; }
 }
-
+ 
 function toRemoteRow(advisorId, c) {
   return {
     advisor_id: advisorId,
@@ -3958,7 +3993,7 @@ function toRemoteRow(advisorId, c) {
     deleted_at: null
   };
 }
-
+ 
 function tombstoneRow(advisorId, convoId) {
   return {
     advisor_id: advisorId,
@@ -3967,7 +4002,7 @@ function tombstoneRow(advisorId, convoId) {
     deleted_at: new Date().toISOString()
   };
 }
-
+ 
 function fromRemoteRow(row) {
   var step = STEPS[row.current_step] ? row.current_step : "start";
   return {
@@ -3979,7 +4014,7 @@ function fromRemoteRow(row) {
     updated: row.updated_at ? Date.parse(row.updated_at) : Date.now()
   };
 }
-
+ 
 async function pushUpsert(advisorId, convo) {
   if (!supabaseClient) return false;
   try {
@@ -3987,7 +4022,7 @@ async function pushUpsert(advisorId, convo) {
     return !res.error;
   } catch (e) { return false; }
 }
-
+ 
 async function pushTombstone(advisorId, convoId) {
   if (!supabaseClient) return false;
   try {
@@ -3995,29 +4030,29 @@ async function pushTombstone(advisorId, convoId) {
     return !res.error;
   } catch (e) { return false; }
 }
-
+ 
 function defaultSyncMeta() { return { pendingUpsert: [], pendingDelete: [], lastSyncedAt: null, lastSyncStatus: "idle" }; }
-
+ 
 function getSyncMeta(advisorId) { return lget(syncMetaKey(advisorId), defaultSyncMeta()); }
-
+ 
 function setSyncMeta(advisorId, meta) { lset(syncMetaKey(advisorId), meta); }
-
+ 
 var syncTimers = {};
-
+ 
 var syncInFlight = {};
-
+ 
 function scheduleSync(advisorId) {
   clearTimeout(syncTimers[advisorId]);
   syncTimers[advisorId] = setTimeout(function () { runSync(advisorId); }, 900);
 }
-
+ 
 function markDirty(advisorId, convoId) {
   var meta = getSyncMeta(advisorId);
   if (meta.pendingUpsert.indexOf(convoId) === -1) meta.pendingUpsert.push(convoId);
   setSyncMeta(advisorId, meta);
   scheduleSync(advisorId);
 }
-
+ 
 function markDeleted(advisorId, convoId) {
   var meta = getSyncMeta(advisorId);
   meta.pendingUpsert = meta.pendingUpsert.filter(function (id) { return id !== convoId; });
@@ -4025,7 +4060,7 @@ function markDeleted(advisorId, convoId) {
   setSyncMeta(advisorId, meta);
   scheduleSync(advisorId);
 }
-
+ 
 async function runSync(advisorId) {
   if (!advisorId || !supabaseClient) return;
   if (syncInFlight[advisorId]) return;
@@ -4072,7 +4107,7 @@ async function runSync(advisorId) {
     syncInFlight[advisorId] = false;
   }
 }
-
+ 
 function syncStatusText(meta) {
   if (typeof navigator !== "undefined" && navigator.onLine === false) return "Offline — will back up when back online";
   var pending = (meta.pendingUpsert || []).length + (meta.pendingDelete || []).length;
@@ -4080,18 +4115,18 @@ function syncStatusText(meta) {
   if (meta.lastSyncedAt) return "Backed up " + fmtAgo(meta.lastSyncedAt);
   return "Not backed up yet";
 }
-
+ 
 function slugify(s) {
   var out = (s || "advisor").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
   return out || "advisor";
 }
-
+ 
 function todayStamp() {
   var d = new Date();
   function p(n) { return n < 10 ? "0" + n : "" + n; }
   return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
 }
-
+ 
 async function downloadBlob(filename, mime, content) {
   var blob;
   try { blob = new Blob([content], { type: mime }); } catch (e) { return false; }
@@ -4127,7 +4162,7 @@ async function downloadBlob(filename, mime, content) {
     return false;
   }
 }
-
+ 
 function exportJSON(advisor, convos, prospects) {
   var payload = {
     exportedAt: new Date().toISOString(),
@@ -4142,13 +4177,13 @@ function exportJSON(advisor, convos, prospects) {
     JSON.stringify(payload, null, 2)
   );
 }
-
+ 
 function csvEscape(v) {
   var s = String(v == null ? "" : v);
   if (/[",\n]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"';
   return s;
 }
-
+ 
 function exportCSV(advisor, convos) {
   var rows = [["id", "client_name", "step_key", "step_title", "stage", "created", "updated"]];
   convos.forEach(function (c) {
@@ -4166,15 +4201,15 @@ function exportCSV(advisor, convos) {
     csv
   );
 }
-
+ 
 function prospectsKey(advisorId) { return "br-prospects-" + advisorId; }
-
+ 
 function prospectSyncMetaKey(advisorId) { return "br-prospect-sync-meta-" + advisorId; }
-
+ 
 function getProspectSyncMeta(advisorId) { return lget(prospectSyncMetaKey(advisorId), defaultSyncMeta()); }
-
+ 
 function setProspectSyncMeta(advisorId, meta) { lset(prospectSyncMetaKey(advisorId), meta); }
-
+ 
 async function fetchCloudProspects(advisorId) {
   if (!supabaseClient) return { data: [] };
   try {
@@ -4183,7 +4218,7 @@ async function fetchCloudProspects(advisorId) {
     return { data: res.data || [] };
   } catch (e) { return { data: [], error: "Couldn't reach the backup." }; }
 }
-
+ 
 async function fetchAllCloudProspects(advisorId) {
   if (!supabaseClient) return { data: [] };
   try {
@@ -4192,7 +4227,7 @@ async function fetchAllCloudProspects(advisorId) {
     return { data: res.data || [] };
   } catch (e) { return { data: [], error: "Couldn't reach the backup." }; }
 }
-
+ 
 function mergeProspectsFromCloud(localList, cloudRows) {
   var map = {};
   localList.forEach(function (p) { map[p.id] = p; });
@@ -4206,7 +4241,7 @@ function mergeProspectsFromCloud(localList, cloudRows) {
   });
   return Object.keys(map).map(function (k) { return map[k]; });
 }
-
+ 
 function toProspectRemoteRow(advisorId, p) {
   return {
     advisor_id: advisorId,
@@ -4217,7 +4252,7 @@ function toProspectRemoteRow(advisorId, p) {
     deleted_at: null
   };
 }
-
+ 
 function prospectTombstoneRow(advisorId, prospectId) {
   return {
     advisor_id: advisorId,
@@ -4226,7 +4261,7 @@ function prospectTombstoneRow(advisorId, prospectId) {
     deleted_at: new Date().toISOString()
   };
 }
-
+ 
 function fromProspectRemoteRow(row) {
   return {
     id: row.prospect_id,
@@ -4235,7 +4270,7 @@ function fromProspectRemoteRow(row) {
     updated: row.updated_at ? Date.parse(row.updated_at) : Date.now()
   };
 }
-
+ 
 async function pushProspectUpsert(advisorId, p) {
   if (!supabaseClient) return false;
   try {
@@ -4243,7 +4278,7 @@ async function pushProspectUpsert(advisorId, p) {
     return !res.error;
   } catch (e) { return false; }
 }
-
+ 
 async function pushProspectTombstone(advisorId, prospectId) {
   if (!supabaseClient) return false;
   try {
@@ -4251,23 +4286,23 @@ async function pushProspectTombstone(advisorId, prospectId) {
     return !res.error;
   } catch (e) { return false; }
 }
-
+ 
 var prospectSyncTimers = {};
-
+ 
 var prospectSyncInFlight = {};
-
+ 
 function scheduleProspectSync(advisorId) {
   clearTimeout(prospectSyncTimers[advisorId]);
   prospectSyncTimers[advisorId] = setTimeout(function () { runProspectSync(advisorId); }, 900);
 }
-
+ 
 function markProspectDirty(advisorId, prospectId) {
   var meta = getProspectSyncMeta(advisorId);
   if (meta.pendingUpsert.indexOf(prospectId) === -1) meta.pendingUpsert.push(prospectId);
   setProspectSyncMeta(advisorId, meta);
   scheduleProspectSync(advisorId);
 }
-
+ 
 function markProspectDeleted(advisorId, prospectId) {
   var meta = getProspectSyncMeta(advisorId);
   meta.pendingUpsert = meta.pendingUpsert.filter(function (id) { return id !== prospectId; });
@@ -4275,7 +4310,7 @@ function markProspectDeleted(advisorId, prospectId) {
   setProspectSyncMeta(advisorId, meta);
   scheduleProspectSync(advisorId);
 }
-
+ 
 async function runProspectSync(advisorId) {
   if (!advisorId || !supabaseClient) return;
   if (prospectSyncInFlight[advisorId]) return;
@@ -4322,7 +4357,7 @@ async function runProspectSync(advisorId) {
     prospectSyncInFlight[advisorId] = false;
   }
 }
-
+ 
 function exportProspectsCSV(advisor, prospects) {
   var rows = [["id", "name", "added", "updated"]];
   prospects.forEach(function (p) {
@@ -4339,27 +4374,27 @@ function exportProspectsCSV(advisor, prospects) {
     csv
   );
 }
-
+ 
 var lastScrollY = 0;
-
+ 
 var prevRouteKey = null;
-
+ 
 function draftKey(advisorId, field) { return "br-draft-" + field + "-" + advisorId; }
-
+ 
 function getDraft(advisorId, field) {
   if (!advisorId) return "";
   var v = lget(draftKey(advisorId, field), "");
   return typeof v === "string" ? v : "";
 }
-
+ 
 function setDraft(advisorId, field, value) {
   if (!advisorId) return;
   if (value) { lset(draftKey(advisorId, field), value); return; }
   try { localStorage.removeItem(draftKey(advisorId, field)); } catch (e) {}
 }
-
+ 
 var draftLoadedFor = null;
-
+ 
 function BackBtn(props) {
   return h("button", {
     onClick: props.onClick,
@@ -4368,7 +4403,7 @@ function BackBtn(props) {
     "aria-label": props.label || "Back"
   }, "←");
 }
-
+ 
 function CloseBtn(props) {
   return h("button", {
     onClick: props.onClick,
@@ -4377,7 +4412,7 @@ function CloseBtn(props) {
     "aria-label": props.label || "Close"
   }, "✕");
 }
-
+ 
 function HomeScreen(props) {
   var convos = props.convos;
   var q = props.search.trim().toLowerCase();
@@ -4398,7 +4433,7 @@ function HomeScreen(props) {
   // would render a second shield and a second "Battle River Unit" right
   // underneath the first one.
   return h("div", { className: "max-w-md mx-auto px-5 pt-5 pb-16" },
-
+ 
     props.restoreOffer && h("div", {
       style: { background: C.surfaceAlt, borderColor: C.gold },
       className: "rounded-2xl border p-4 mb-6"
@@ -4557,7 +4592,7 @@ function HomeScreen(props) {
     // to go.
   );
 }
-
+ 
 function QuickAddSheet(props) {
   // Rule 12: the field opens holding whatever was last typed into it and
   // never lost, including across a close, a tab switch, or a reload.
@@ -4646,7 +4681,7 @@ function QuickAddSheet(props) {
     )
   );
 }
-
+ 
 function NamesListScreen(props) {
   var prospects = props.prospects;
  
@@ -4684,7 +4719,7 @@ function NamesListScreen(props) {
   // so it moves inline above the list.
   return h("div", { className: "max-w-md mx-auto pb-16" },
     h("div", { className: "px-5 pt-5" },
-
+ 
       needFollowUp > 0 && h("div", {
         style: { color: overdue > 0 ? urgencyColor("high") : C.gold },
         className: "text-[11px] font-mono font-semibold mb-3"
@@ -4777,7 +4812,7 @@ function NamesListScreen(props) {
     )
   );
 }
-
+ 
 function ActivityLogStatusCard(props) {
   var advisor = props.advisor;
   var pendingState = useState(getPendingBumps().length); var pendingCount = pendingState[0], setPendingCount = pendingState[1];
@@ -4816,7 +4851,7 @@ function ActivityLogStatusCard(props) {
     )
   );
 }
-
+ 
 function OnboardingScreen(props) {
   var stepState = useState(0); var step = stepState[0], setStep = stepState[1];
  
@@ -4879,7 +4914,7 @@ function OnboardingScreen(props) {
     )
   );
 }
-
+ 
 function SettingsScreen(props) {
   var advisor = props.advisor, convos = props.convos, meta = props.syncMeta;
  
@@ -4916,8 +4951,8 @@ function SettingsScreen(props) {
  
   return h("div", { className: "max-w-md mx-auto pb-16" },
     h("div", {
-      style: { background: C.surface, borderColor: C.line, top: "env(safe-area-inset-top)" },
-      className: "px-5 pt-5 pb-4 border-b sticky top-0 z-10"
+      style: { background: C.surface, borderColor: C.line },
+      className: "px-5 safe-top pb-4 border-b sticky top-0 z-10"
     },
       h("div", { className: "font-display text-2xl" }, "Settings")
     ),
@@ -5049,7 +5084,7 @@ function SettingsScreen(props) {
     )
   );
 }
-
+ 
 function StepScreen(props) {
   var convo = props.convo, onGo = props.onGo, onHome = props.onHome, onFlash = props.onFlash, onTouch = props.onTouch;
   var step = STEPS[convo.step] || STEPS.start;
@@ -5073,8 +5108,8 @@ function StepScreen(props) {
  
   return h("div", { className: "max-w-md mx-auto pb-16" },
     h("div", {
-      style: { background: C.surface, borderColor: C.line, top: "env(safe-area-inset-top)" },
-      className: "px-5 pt-5 pb-4 border-b sticky top-0 z-10"
+      style: { background: C.surface, borderColor: C.line },
+      className: "px-5 safe-top pb-4 border-b sticky top-0 z-10"
     },
       h("div", { className: "flex items-center justify-between mb-3" },
         h(BackBtn, { onClick: onHome, label: "Back to all chats" }),
@@ -5159,9 +5194,9 @@ function StepScreen(props) {
     )
   );
 }
-
+ 
 // ===================== MERGED SHELL =======================
-
+ 
 // ---------------------------------------------------------------------
 // Advisor photos.
 //
@@ -5181,7 +5216,7 @@ var AVATAR_PX = 256;
 var AVATAR_MAX_CHARS = 60000;              // must match the CHECK constraint
 var AVATAR_QUALITIES = [0.82, 0.7, 0.6, 0.5];
 var AVATAR_CACHE_KEY = "br-avatars";
-
+ 
 // Reads a picked file, centre-crops it square, and re-encodes it small
 // enough to store. Steps down the JPEG quality until it fits rather than
 // failing on a large photo — a rejection the advisor can't act on ("too
@@ -5217,7 +5252,7 @@ function fileToSquareDataUrl(file, size) {
     reader.readAsDataURL(file);
   });
 }
-
+ 
 // Cached locally so a returning advisor sees faces on first paint rather
 // than a flash of initials while the fetch lands (rule 7 in spirit: never
 // show an empty state you already know the answer to).
@@ -5225,7 +5260,7 @@ function cachedAvatars() {
   var v = lget(AVATAR_CACHE_KEY, null);
   return (v && typeof v === "object") ? v : {};
 }
-
+ 
 async function fetchAvatars() {
   if (!sb) return { data: null };
   try {
@@ -5237,7 +5272,7 @@ async function fetchAvatars() {
     return { data: map };
   } catch (e) { return { data: null, error: "Couldn't reach the photos." }; }
 }
-
+ 
 async function pushAvatar(advisorId, dataUrl) {
   if (!sb) return { error: "Cloud isn't reachable." };
   try {
@@ -5248,7 +5283,7 @@ async function pushAvatar(advisorId, dataUrl) {
     return {};
   } catch (e) { return { error: "Couldn't reach the server." }; }
 }
-
+ 
 // One circle, used everywhere an advisor appears. Falls back to initials,
 // which is what the app did before photos existed, so an advisor who
 // never sets one loses nothing.
@@ -5273,7 +5308,7 @@ function Avatar(props) {
     "aria-hidden": "true"
   }, initialsOf(props.name));
 }
-
+ 
 // RULE 13: the photo library prompt is raised by the tap on "Choose
 // photo" and nowhere else. The file input is never focused, clicked or
 // mounted-and-triggered on load.
@@ -5282,7 +5317,7 @@ function AvatarPicker(props) {
   var busyState = useState(false); var busy = busyState[0], setBusy = busyState[1];
   var msgState = useState(""); var msg = msgState[0], setMsg = msgState[1];
   var okState = useState(true); var ok = okState[0], setOk = okState[1];
-
+ 
   async function onChange(ev) {
     var file = ev.target.files && ev.target.files[0];
     ev.target.value = "";                       // so re-picking the same file still fires
@@ -5299,7 +5334,7 @@ function AvatarPicker(props) {
     }
     setBusy(false);
   }
-
+ 
   return h("div", {
     style: { background: COLORS.parchment, borderColor: COLORS.line },
     className: "rounded-2xl border px-4 py-3.5"
@@ -5329,8 +5364,8 @@ function AvatarPicker(props) {
     }, msg)
   );
 }
-
-
+ 
+ 
 // ---------------------------------------------------------------------
 // MoreView — the fifth destination.
 //
@@ -5364,7 +5399,7 @@ function MoreRow(props) {
     h("span", { style: { color: COLORS.slate }, className: "shrink-0" }, "\u203A")
   );
 }
-
+ 
 function MoreView(props) {
   return h("div", { className: "px-4 pt-5" },
     h("div", { style: { color: COLORS.slate }, className: "text-[11px] font-mono uppercase tracking-widest mb-2.5" }, "Performance"),
@@ -5375,7 +5410,7 @@ function MoreView(props) {
         onClick: function () { props.onGo("team"); }
       })
     ),
-
+ 
     h("div", { style: { color: COLORS.slate }, className: "text-[11px] font-mono uppercase tracking-widest mb-2.5" }, "Unit management"),
     h("div", { className: "space-y-2 mb-7" },
       h(MoreRow, {
@@ -5389,7 +5424,7 @@ function MoreView(props) {
         onClick: function () { if (props.isManager) props.onGo("recruitment"); else props.onManagerTools(); }
       })
     ),
-
+ 
     h("div", { style: { color: COLORS.slate }, className: "text-[11px] font-mono uppercase tracking-widest mb-2.5" }, "Script tool"),
     h("div", { className: "space-y-2 mb-7" },
       h(MoreRow, {
@@ -5403,7 +5438,7 @@ function MoreView(props) {
         onClick: function () { props.onGoSheet("tour"); }
       })
     ),
-
+ 
     h("div", { style: { color: COLORS.slate }, className: "text-[11px] font-mono uppercase tracking-widest mb-2.5" }, "Account"),
     h("div", { className: "space-y-2" },
       h(MoreRow, {
@@ -5412,13 +5447,13 @@ function MoreView(props) {
         onClick: props.onAccount
       })
     ),
-
+ 
     h("div", { style: { color: COLORS.slate }, className: "text-[11px] leading-relaxed mt-7 px-1" },
       "This device is identified by name and PIN, not by a full login. Treat it as attribution, not account security.")
   );
 }
-
-
+ 
+ 
 // =====================================================================
 // ScriptSection — the chat-selling script half of the app.
 //
@@ -5438,7 +5473,7 @@ function ScriptSection(props) {
   var setAdvisor = props.onAdvisorPatch;   // used only by the code-backfill effect
   var screen = props.screen;               // "home" | "names" | "settings" | "onboarding"
   var setScreen = props.onSetScreen;
-
+ 
   // navPush() was this app's own history bookkeeping. The shell pushes a
   // history entry for every route change now, so these call sites are
   // kept (rather than deleted from five places) as a documented no-op.
@@ -5671,7 +5706,7 @@ function ScriptSection(props) {
  
   var overdueCount = 0;
   convos.forEach(function (c) { if (urgency(c) === "high") overdueCount++; });
-
+ 
   // The Chats tab badge lives in the shell's bottom nav, so the count has
   // to travel up. Reported on change only, never on every render.
   useEffect(function () {
@@ -5720,7 +5755,7 @@ function ScriptSection(props) {
     logEvent("script_deeplink_opened", advisor.code, { target: "convo", resolved: found });
     // eslint-disable-next-line
   }, [advisor && advisor.id, convosReady, activeId, convos.length]);
-
+ 
   // ?focus=overdue — what the daily OneSignal digest links to. Applied
   // once, then cleared from the route so a later manual sort sticks.
   useEffect(function () {
@@ -5994,7 +6029,7 @@ function ScriptSection(props) {
     style: { background: C.gold, color: COLORS.parchment },
     className: "px-5 py-2.5 rounded-full text-sm font-semibold shadow-lg"
   }, toast.msg)) : null;
-
+ 
   var undoBannerEl = undoInfo ? h("div", {
     key: "undo",
     className: "fixed left-0 right-0 flex justify-center z-50 px-5",
@@ -6010,7 +6045,7 @@ function ScriptSection(props) {
       className: "px-4 py-2 rounded-full text-sm font-bold shrink-0 active:scale-95 transition-transform"
     }, "Undo")
   )) : null;
-
+ 
   // Floating quick-add: available from Chats and Names, because the moment
   // an advisor thinks of a name doesn't wait for them to navigate first.
   // Deliberately an overlay, not a screen — whatever they were doing is
@@ -6023,29 +6058,29 @@ function ScriptSection(props) {
     className: "fixed right-5 z-40 w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-3xl font-bold active:scale-95 transition-transform",
     "aria-label": "Quick-add a prospect"
   }, "+") : null;
-
+ 
   var quickAddSheetEl = quickAddOpen ? h(QuickAddSheet, {
     key: "quickadd",
     advisorId: advisor && advisor.id,
     onSave: addProspect,
     onClose: props.onCloseQuickAdd
   }) : null;
-
+ 
   if (!advisor) return null;
-
+ 
   // Every screen below inherits its text colour from this wrapper. The
   // pre-merge shell set it and a handful of elements — the Names heading,
   // the Settings heading, the conversation name on the step screen, the
   // tour slide titles — carry no colour of their own and rely on it.
   // Without it they render in the browser default: black on near-black.
   var WRAP = { color: C.text };
-
+ 
   var overlays = [toastEl, undoBannerEl, fabEl, quickAddSheetEl];
-
+ 
   if (screen === "onboarding") {
     return h("div", { style: WRAP }, h(OnboardingScreen, { onFinish: finishOnboarding }), toastEl);
   }
-
+ 
   if (screen === "settings") {
     return h("div", { style: WRAP },
       h(SettingsScreen, {
@@ -6063,7 +6098,7 @@ function ScriptSection(props) {
       overlays
     );
   }
-
+ 
   if (screen === "names") {
     return h("div", { style: WRAP },
       h(NamesListScreen, {
@@ -6078,7 +6113,7 @@ function ScriptSection(props) {
       overlays
     );
   }
-
+ 
   if (!active) {
     return h("div", { style: WRAP },
       h(HomeScreen, {
@@ -6096,14 +6131,14 @@ function ScriptSection(props) {
       overlays
     );
   }
-
+ 
   return h("div", { style: WRAP },
     h(StepScreen, { convo: active, onGo: goTo, onHome: goBack, onFlash: flash, onTouch: touch }),
     overlays
   );
 }
-
-
+ 
+ 
 function App() {
   var loadingState = useState(true); var loading = loadingState[0], setLoading = loadingState[1];
   var dbErrorState = useState(null); var dbError = dbErrorState[0], setDbError = dbErrorState[1];
@@ -6151,21 +6186,21 @@ function App() {
   // Chats is the landing destination: the script is what an advisor opens
   // the app to do, and logging today's numbers follows from having done it.
   var requestedView = VIEW_KEYS.indexOf(route.view) !== -1 ? route.view : "chats";
-
+ 
   // Reported up from ScriptSection for the Chats tab badge.
   var overdueState = useState(0); var overdueCount = overdueState[0], setOverdueCount = overdueState[1];
-
+ 
   // Advisor photos, keyed by advisor id. Seeded from the local cache so
   // faces are on screen at first paint, then refreshed from the server.
   var avatarState = useState(function () { return cachedAvatars(); });
   var avatars = avatarState[0], setAvatars = avatarState[1];
-
+ 
   // How many history entries this session has pushed. Dismissing an
   // overlay pops one only if we actually created it; someone who opened a
   // deep link straight onto a sheet gets a plain state replace instead, so
   // ✕ never boots them out of the app entirely.
   var pushDepthRef = useRef(0);
-
+ 
   function navigate(patch, push) {
     var next = Object.assign({}, route, patch);
     setRoute(next);
@@ -6315,12 +6350,12 @@ function App() {
     : "home";
   var scriptVisible = view === "chats" || view === "names"
     || (view === "more" && (route.sheet === "script" || route.sheet === "tour"));
-
+ 
   useEffect(function () {
     if (managerOnly && !isManager && myIdentity) setShowManagerGate(true);
     // eslint-disable-next-line
   }, [managerOnly, isManager, !!myIdentity]);
-
+ 
   // Normalise the URL on first paint so Back has somewhere to go, and keep
   // the in-memory route in step with the browser's own history stack.
   useEffect(function () {
@@ -6335,14 +6370,14 @@ function App() {
     return function () { window.removeEventListener("popstate", onPop); };
     // eslint-disable-next-line
   }, []);
-
+ 
   // One fetch when entering the data-backed area — not once per tab tap.
   var dataScope = (isAdvisorTab || view === "manager") ? "team" : "none";
   useEffect(function () {
     if (dataScope === "team") loadTeamData();
     // eslint-disable-next-line
   }, [dataScope]);
-
+ 
   // RULE 8: each destination keeps its own scroll offset. Leaving Team for
   // Rewards and coming back returns you to the same pixel, not the top.
   // Declared up here with the other hooks so it can never sit behind one of
@@ -6391,7 +6426,7 @@ function App() {
   useEffect(function () {
     if (myIdentity) lset("br-advisor", myIdentity);
   }, [myIdentity && myIdentity.id]);
-
+ 
   useEffect(function () {
     if (!myIdentity) return;
     var cancelled = false;
@@ -6401,7 +6436,7 @@ function App() {
     });
     return function () { cancelled = true; };
   }, [myIdentity && myIdentity.id]);
-
+ 
   // RULE 11: the new photo is on screen before the round trip finishes,
   // and rolled back only if the write actually fails.
   var saveAvatar = async function (advisorId, dataUrl) {
@@ -6419,11 +6454,11 @@ function App() {
     }
     return {};
   };
-
+ 
   // The leaderboard identifies advisors by code, the photos table by id.
   var avatarByCode = {};
   roster.forEach(function (r) { if (avatars[r.id]) avatarByCode[r.code] = avatars[r.id]; });
-
+ 
   function setPendingSelf(p) {
     setPendingSelfState(p);
     lset("br-pending-advisor", p);
@@ -6866,7 +6901,7 @@ function App() {
   if (loading) {
     return h("div", { style: { background: COLORS.parchment, minHeight: "100vh" } },
       h("div", { className: "max-w-md mx-auto" },
-        h("div", { style: { background: COLORS.card }, className: "px-4 pt-5 pb-5 rounded-b-3xl" },
+        h("div", { style: { background: COLORS.card }, className: "px-4 safe-top pb-5 rounded-b-3xl" },
           h("div", { className: "flex items-center gap-3" },
             h(BattleRiverMark, { size: 34, uid: "load" }),
             h("div", { className: "flex-1 space-y-2" },
@@ -6897,7 +6932,7 @@ function App() {
     var leaveRecruitment = function () {
       setIsRecruitment(false); lset("is-recruitment", false); setSwitching(true);
     };
-    var recHeader = h("header", { style: { background: COLORS.card }, className: "px-4 pt-5 pb-4 rounded-b-3xl" },
+    var recHeader = h("header", { style: { background: COLORS.card }, className: "px-4 safe-top pb-4 rounded-b-3xl" },
       h("div", { className: "flex items-center gap-3" },
         h(BackButton, { onClick: leaveRecruitment, label: "Back to sign-in" }),
         h("div", { className: "flex items-center gap-3 min-w-0 flex-1" },
@@ -6921,9 +6956,9 @@ function App() {
       )
     );
   }
-
+ 
   var showOnboarding = !myIdentity || switching;
-
+ 
   // RULE 9: tapping the tab you are already on takes you to the top of it.
   // RULE 9: tapping the tab you are already on returns to that tab's root
   // and scrolls to the top. On Chats, "root" means the conversation list —
@@ -6939,7 +6974,7 @@ function App() {
     if ((key === "manager" || key === "recruitment") && !isManager) { setShowManagerGate(true); return; }
     navigate({ view: key, advisor: null, sheet: null, convo: null, prospect: null, focus: null }, true);
   }
-
+ 
   // Jakob's Law caps a bottom bar at about five destinations before it
   // stops reading as navigation and starts reading as a menu. Five it is,
   // in the order the work actually happens: talk to people, keep the
@@ -6954,9 +6989,9 @@ function App() {
     { key: "rewards", label: "Rewards", icon: "rewards" },
     { key: "more", label: "More", icon: "more" }
   ];
-
+ 
   var openSheet = route.sheet;
-
+ 
   // RULE 6, single definition. ← , ✕ , Escape, a downward swipe on a sheet
   // and the hardware back button all call this, so they cannot disagree
   // about what "one screen back" means.
@@ -6966,7 +7001,7 @@ function App() {
     if (route.sheet) { navigate({ sheet: null }, false); return; }
     if (view !== "chats") { navigate({ view: "chats" }, false); return; }
   }
-
+ 
   var closeSheet = function () {
     // RULE 6: ✕, Esc, a downward swipe and the hardware Back button all
     // resolve to "go back exactly one screen". When we pushed the entry,
@@ -6975,7 +7010,7 @@ function App() {
     if (pushDepthRef.current > 0) window.history.back();
     else navigate({ sheet: null, advisor: null }, false);
   };
-
+ 
   var mainBody = null;
   if (!showOnboarding) {
     var viewTitle = view === "manager" ? "Manager view"
@@ -6988,7 +7023,7 @@ function App() {
       : view === "recruitment" ? "Battle River \u00b7 ACES"
       : (view === "chats" || view === "names") ? "Battle River \u00b7 Sell thru chat"
       : "Battle River \u00b7 Unit";
-
+ 
     var header = h(AppHeader, {
       uid: "hdr",
       eyebrow: viewEyebrow,
@@ -7003,7 +7038,7 @@ function App() {
       // itself with a live progress bar rather than a frozen page.
       h("div", { className: "mt-3" }, h(ProgressBar, { active: !!teamLoading, label: "Refreshing team data" }))
     );
-
+ 
     mainBody = h("div", { className: "max-w-md mx-auto has-bottom-nav" },
       header,
       // ---- Script half. Always mounted, hidden when another tab is on
@@ -7038,7 +7073,7 @@ function App() {
           onAddAdvisor: function () { navigate({ view: "more", sheet: "script" }, true); }
         })
       ),
-
+ 
       view === "more" && !route.sheet && h(MoreView, {
         advisor: myIdentity, isManager: isManager,
         onGo: function (v) { navigate({ view: v, advisor: null, sheet: null }, true); },
@@ -7047,7 +7082,7 @@ function App() {
         onAccount: function () { navigate({ sheet: "account" }, true); },
         overdueCount: overdueCount
       }),
-
+ 
       isAdvisorTab && h(AdvisorView, {
         section: view,
         date: today, entry: myTodayEntry, pulse: pulse, targets: targets, saveError: saveError,
@@ -7094,7 +7129,7 @@ function App() {
         "Built by Matthew Isaiah Masindo")
     );
   }
-
+ 
   return h("div", { style: { background: COLORS.parchment, minHeight: "100vh" } },
     pendingSelf
       ? h(WaitingApprovalScreen, {
@@ -7111,9 +7146,9 @@ function App() {
               onEnterRecruitment: function () { setIsRecruitment(true); lset("is-recruitment", true); setSwitching(false); }
             })
           : mainBody),
-
+ 
     !showOnboarding && !pendingSelf && h(BottomNav, { tabs: navTabs, active: view, onSelect: onTabPress }),
-
+ 
     !showOnboarding && !pendingSelf && openSheet === "account" && h(AccountSheet, {
       advisor: myIdentity, isManager: isManager, isRecruitment: isRecruitment,
       avatarSrc: avatars[myIdentity.id],
@@ -7124,18 +7159,18 @@ function App() {
       onExport: isManager ? function () { navigate({ view: "manager", sheet: "export" }, true); } : null,
       lastSyncedAt: lastSyncedAt
     }),
-
+ 
     !showOnboarding && !pendingSelf && openSheet === "search" && h(SearchSheet, {
       roster: roster, referrals: referrals, initialQuery: route.q || "",
       onClose: closeSheet,
       onPickAdvisor: function (code) { navigate({ view: "manager", advisor: code, sheet: null, q: null }, true); },
       onPickCandidate: function (name) { navigate({ view: "manager", sheet: null, q: name }, true); }
     }),
-
+ 
     showManagerGate && h(ManagerGate, { hasPin: hasManagerPin, onSubmit: unlockManager, onClose: cancelManagerGate })
   );
 }
-
+ 
 ReactDOM.createRoot(document.getElementById("root")).render(h(App));
 })();
 </script>
