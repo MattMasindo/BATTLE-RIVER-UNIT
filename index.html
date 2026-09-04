@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2211,6 +2212,7 @@ function ManagerView(props) {
     onAddManagerSubmission = props.onAddManagerSubmission,
     pendingRoster = props.pendingRoster || [], onAddAdvisor = props.onAddAdvisor,
     onApproveAdvisor = props.onApproveAdvisor, onRejectAdvisor = props.onRejectAdvisor,
+    coachingStats = props.coachingStats || null,
     myCode = props.myCode;
  
   // RULES 6, 14 and 15: every overlay in this view is addressable in the
@@ -2532,6 +2534,12 @@ function ManagerView(props) {
             }),
         consInc.sentinel
       )
+    ),
+    h("div", null,
+      h(SectionTitle, { label: "Coaching Signals" }),
+      h("div", { style: { color: COLORS.slate }, className: "text-[11px] leading-relaxed mb-2.5" },
+        "Read off the script itself, all-time since the instrumentation went in. Each gate is a branch where a conversation either carries on or falls into a follow-up step \u2014 the point is to walk into a one-to-one with a specific question already in hand."),
+      h(CoachingCard, { stats: coachingStats, loading: loading, myCode: myCode })
     ),
     h("div", null,
       h("div", { className: "flex items-center justify-between mb-2.5" },
@@ -3340,6 +3348,340 @@ function SubmissionBox(props) {
   );
 }
  
+// =====================================================================
+// PATCH 8 — Coaching Card.
+//
+// Patch 7 built this around a death-step histogram: count where removed
+// conversations were sitting, name that step as the skill gap. Nine days
+// of real data killed that design. Three removals total, two of them the
+// manager's own test conversations — one genuine removal against 143 step
+// advances. The team does not declare conversations dead. They let them
+// sit in the queue, so there is no death event to count.
+//
+// The same 143 advances each carry a from/to pair that nothing read. That
+// IS the funnel: every branch in the script where a conversation either
+// progresses or falls into a chase step is a measurable gate. It works at
+// today's volume, needs no new instrumentation, and names a skill rather
+// than a person — which was the point of the card in the first place.
+//
+// The copy-to-advance ratio survives but is no longer a judgement. The
+// step-level data showed copy rates of 0.75 on chase steps against 0.32
+// on main-line steps — same clipboard, same phones. Advisors paste when
+// re-engaging someone who went quiet and type when they are mid-
+// conversation, which is the tool working correctly. So the number
+// measures how much of the wording was borrowed, nothing more.
+//
+// Sources: usage_events for gates and copy counts (via get_coaching_stats,
+// SECURITY DEFINER so the anon key never needs SELECT on it),
+// conversation_backups for the live board census.
+// =====================================================================
+
+// A gate needs this many resolved outcomes before a percentage is shown.
+// Below it the raw counts still render — hiding them would be worse — but
+// without a rate, because 1-of-2 is not 50%.
+var COACH_MIN_GATE_N = 8;
+
+// Reliance needs this many script events before it says anything at all.
+var COACH_MIN_ADVISOR_EVENTS = 20;
+
+// Funnel order is the script's own order, not count order. A funnel sorted
+// by size is not a funnel.
+var COACH_STAGE_ORDER = ["approach", "relationship", "prospect", "appointment", "presented", "closing"];
+
+// Every branch in the 26-step script where a conversation either moves on
+// or falls into a chase/dead step. `won` and `lost` are the actual step
+// keys from STEPS — if the script gains a branch, this is the one place to
+// add it. Anything else out of a gate step (a restart, say) lands in
+// `other` and is kept out of the denominator rather than depressing it.
+var COACH_GATES = [
+  { key: "start", label: "Opener got a reply",
+    won: ["explain_payout", "has_plan"], lost: ["seen_opener"],
+    ask: "What is landing in the first message, and what is not?" },
+  { key: "ask_details", label: "Name and birthday sent",
+    won: ["got_details"], lost: ["chase_details"],
+    ask: "How is the ask being framed?" },
+  { key: "appt_day", label: "Meeting day chosen",
+    won: ["appt_weekday", "appt_weekend"], lost: ["chase_appt"],
+    ask: "Are two options being offered, or a yes/no question?" },
+  { key: "benefit_payout", label: "Presentation answered",
+    won: ["forms", "questions"], lost: ["chase_present"],
+    ask: "Is the quotation landing, or going quiet?" },
+  { key: "forms", label: "Forms and ID returned",
+    won: ["close_bank"], lost: ["chase_forms"],
+    ask: "Is the form being made easy enough to finish?" }
+];
+
+function coachStepLabel(key) {
+  var st = STEPS[key];
+  if (st) return st.title;
+  return key === "(unknown)" ? "Unrecorded step" : key;
+}
+
+function coachStepColor(key) {
+  var st = STEPS[key];
+  var stage = st && STAGES[st.stage];
+  return stage ? stage.color : COLORS.slate;
+}
+
+function coachRatio(copied, advanced) {
+  if (!advanced) return null;
+  return copied / advanced;
+}
+
+// Describes where the wording came from. Carries no implication about
+// effort, volume or honesty, because the data does not support one: the
+// hardest-working advisor on this team sits mid-range and the lowest
+// number belongs to someone writing in their own voice, which is fine.
+function coachRelianceBand(ratio) {
+  if (ratio == null) return { key: "none", label: "no step advances yet" };
+  if (ratio >= 0.7) return { key: "high", label: "mostly sending the written lines" };
+  if (ratio >= 0.35) return { key: "mixed", label: "mixing the script with their own words" };
+  return { key: "low", label: "mostly writing their own words" };
+}
+
+function coachTopN(list, n) {
+  return (list || []).slice().sort(function (a, b) {
+    if (b.n !== a.n) return b.n - a.n;
+    return a.step < b.step ? -1 : 1;
+  }).slice(0, n || 6);
+}
+
+// Rolls the raw transition list into one row per gate. `reached` is the
+// count of resolved outcomes (won + lost) — deliberately NOT including
+// `other`, so a restart cannot make a gate look worse than it was.
+function coachGateStats(transitions) {
+  var byFrom = {};
+  (transitions || []).forEach(function (t) {
+    var f = t.from, to = t.to;
+    if (!f || !to) return;
+    if (!byFrom[f]) byFrom[f] = {};
+    byFrom[f][to] = (byFrom[f][to] || 0) + (t.n || 0);
+  });
+  return COACH_GATES.map(function (g) {
+    var outs = byFrom[g.key] || {};
+    var won = 0, lost = 0, other = 0;
+    Object.keys(outs).forEach(function (to) {
+      var n = outs[to];
+      if (g.won.indexOf(to) !== -1) won += n;
+      else if (g.lost.indexOf(to) !== -1) lost += n;
+      else other += n;
+    });
+    var reached = won + lost;
+    return {
+      key: g.key, label: g.label, ask: g.ask,
+      won: won, lost: lost, other: other, reached: reached,
+      rate: reached > 0 ? won / reached : null,
+      enough: reached >= COACH_MIN_GATE_N
+    };
+  });
+}
+
+// The gate losing the most conversations in absolute terms, not the worst
+// percentage — a 0% gate that two people reached is not the problem.
+function coachWeakestGate(gates) {
+  var best = null;
+  (gates || []).forEach(function (g) {
+    if (!g.enough || g.lost === 0) return;
+    if (!best || g.lost > best.lost) best = g;
+  });
+  return best;
+}
+
+// Closed deals and dead-on-arrival leads still sit in conversation_backups
+// as undeleted rows. Counting them as live board would put every closed
+// client in "Client Closed" forever and every Sun-Life-already lead in
+// "Relationship Touch", so they come out separately.
+function coachStageFunnel(funnel) {
+  var byStage = {};
+  COACH_STAGE_ORDER.forEach(function (k) { byStage[k] = 0; });
+  var finished = 0, other = 0;
+  (funnel || []).forEach(function (row) {
+    var n = row.n || 0;
+    if (FINISHED[row.step]) { finished += n; return; }
+    var st = STEPS[row.step];
+    if (st && byStage[st.stage] != null) byStage[st.stage] += n;
+    else other += n;
+  });
+  var stages = COACH_STAGE_ORDER.map(function (k) {
+    return { stage: k, label: (STAGES[k] && STAGES[k].label) || k, n: byStage[k], color: (STAGES[k] && STAGES[k].color) || COLORS.slate };
+  });
+  var live = stages.reduce(function (a, b) { return a + b.n; }, 0) + other;
+  return { stages: stages, finished: finished, other: other, live: live };
+}
+
+// How many live conversations are parked on a chase or seen step. This is
+// the number that reframed the whole card: over half the board waiting on
+// somebody else to reply is a different problem from low activity.
+function coachWaitingCount(funnel) {
+  var n = 0;
+  (funnel || []).forEach(function (row) {
+    if (/^(chase_|seen_)/.test(row.step)) n += row.n || 0;
+  });
+  return n;
+}
+
+function CoachBar(props) {
+  var pct = props.max > 0 ? Math.max(2, Math.round((props.n / props.max) * 100)) : 0;
+  return h("div", { className: "flex items-center gap-2.5" },
+    h("div", { style: { color: COLORS.ink, width: "44%" }, className: "text-[11px] truncate shrink-0" }, props.label),
+    h("div", { style: { background: COLORS.line }, className: "flex-1 h-2 rounded-full overflow-hidden" },
+      h("div", { style: { background: props.color, width: pct + "%", height: "100%", borderRadius: "999px" } })
+    ),
+    h("div", { style: { color: COLORS.slate, width: "26px" }, className: "font-mono text-[10px] text-right shrink-0" }, String(props.n))
+  );
+}
+
+// A gate row is a split bar: carried through on the left, lost to a chase
+// step on the right. The eye should land on the widest red segment.
+function CoachGateRow(props) {
+  var g = props.g;
+  if (g.reached === 0) {
+    return h("div", null,
+      h("div", { className: "flex items-baseline justify-between gap-2" },
+        h("div", { style: { color: COLORS.slate }, className: "text-[11px] truncate" }, g.label),
+        h("div", { style: { color: COLORS.slate }, className: "font-mono text-[10px] shrink-0" }, "no data")
+      )
+    );
+  }
+  var wonPct = Math.round((g.won / g.reached) * 100);
+  return h("div", null,
+    h("div", { className: "flex items-baseline justify-between gap-2 mb-1" },
+      h("div", { style: { color: COLORS.ink }, className: "text-[11px] truncate" }, g.label),
+      h("div", { style: { color: g.enough ? COLORS.brass : COLORS.slate }, className: "font-mono text-[10px] shrink-0" },
+        g.enough ? (wonPct + "%") : (g.won + " of " + g.reached))
+    ),
+    h("div", { style: { background: COLORS.line }, className: "flex h-2 rounded-full overflow-hidden" },
+      h("div", { style: { background: COLORS.good, width: wonPct + "%" } }),
+      h("div", { style: { background: COLORS.emphasis, width: (100 - wonPct) + "%" } })
+    ),
+    h("div", { style: { color: COLORS.slate }, className: "text-[10px] font-mono mt-1" },
+      g.won + " carried on \u00b7 " + g.lost + " still waiting" +
+      (g.enough ? "" : " \u00b7 too few to read as a rate yet"))
+  );
+}
+
+function CoachingCard(props) {
+  var stats = props.stats, loading = props.loading, myCode = props.myCode;
+
+  // Placed before every early return — a hook after a conditional return is
+  // how this app has produced a blank screen before.
+  useEffect(function () {
+    logEvent("coaching_card_viewed", myCode, { has_data: !!stats });
+    // eslint-disable-next-line
+  }, [!!stats]);
+
+  if (!stats) {
+    return loading
+      ? h(SkeletonCard, { lines: 4 })
+      : h("div", { style: { background: COLORS.card, borderColor: COLORS.line, color: COLORS.slate }, className: "rounded-2xl border p-4 text-sm" },
+          "Coaching data hasn\u2019t loaded. Pull to refresh, or check that get_coaching_stats has been created.");
+  }
+
+  var totals = stats.totals || {};
+  var funnel = coachStageFunnel(stats.funnel);
+  var waiting = coachWaitingCount(stats.funnel);
+  var gates = coachGateStats(stats.transitions);
+  var weakest = coachWeakestGate(gates);
+  var funnelMax = funnel.stages.reduce(function (a, b) { return b.n > a ? b.n : a; }, 0);
+  // Case-insensitive: the live roster mixes "MATTHEW ISAIAH MASINDO" with
+  // "Ma. Laisa Lyn J. Rocero-Magdaong", and a raw < comparison sorts every
+  // shouted name above every capitalised one.
+  var advisors = (stats.advisors || []).slice().sort(function (a, b) {
+    var an = (a.name || "").toLowerCase(), bn = (b.name || "").toLowerCase();
+    if (an === bn) return 0;
+    return an < bn ? -1 : 1;
+  });
+
+  return h("div", { style: { background: COLORS.card, borderColor: COLORS.line }, className: "rounded-2xl border divide-y" },
+
+    // ---- The headline. If most of the board is parked on a chase step,
+    // that is the unit's actual problem and it should be the first thing
+    // read, ahead of any per-person number.
+    waiting > 0 && funnel.live > 0 && h("div", { style: { borderColor: COLORS.line }, className: "px-4 py-3.5" },
+      h("div", { style: { color: COLORS.ink }, className: "text-sm leading-relaxed" },
+        h("span", { style: { color: COLORS.emphasis }, className: "font-mono font-semibold" }, waiting + " of " + funnel.live),
+        " live conversations are parked on a follow-up step \u2014 waiting on somebody else to reply."),
+      h("div", { style: { color: COLORS.slate }, className: "text-[11px] leading-relaxed mt-1" },
+        Math.round((waiting / funnel.live) * 100) + "% of the board. If this stays high, the constraint is re-engagement, not prospecting volume.")
+    ),
+
+    // ---- Live board census. No gate: it is a census, not a sample.
+    h("div", { style: { borderColor: COLORS.line }, className: "px-4 py-3.5" },
+      h("div", { style: { color: COLORS.slate }, className: "text-[10px] font-mono uppercase tracking-widest mb-2.5" },
+        "Where the board is sitting right now"),
+      funnel.live === 0
+        ? h("div", { style: { color: COLORS.slate }, className: "text-xs py-1" }, "No live conversations on the board.")
+        : h("div", { className: "space-y-1.5" },
+            funnel.stages.map(function (row) {
+              return h(CoachBar, { key: row.stage, label: row.label, n: row.n, max: funnelMax, color: row.color });
+            })
+          ),
+      h("div", { style: { color: COLORS.slate }, className: "text-[10px] font-mono mt-2.5" },
+        funnel.live + " live" + (funnel.finished ? " \u00b7 " + funnel.finished + " closed or passed" : "") +
+        (funnel.other ? " \u00b7 " + funnel.other + " unrecognised" : "") +
+        ((totals.removed || 0) ? " \u00b7 " + totals.removed + " removed to date" : ""))
+    ),
+
+    // ---- The gates. This replaced the death-step histogram.
+    h("div", { style: { borderColor: COLORS.line }, className: "px-4 py-3.5" },
+      h("div", { style: { color: COLORS.slate }, className: "text-[10px] font-mono uppercase tracking-widest mb-3" },
+        "Where conversations stall"),
+      h("div", { className: "space-y-3.5" },
+        gates.map(function (g) { return h(CoachGateRow, { key: g.key, g: g }); })
+      ),
+      weakest && h("div", {
+        style: { background: "rgba(255,106,61,0.10)", borderColor: COLORS.emphasis },
+        className: "rounded-xl border p-3 mt-3.5"
+      },
+        h("div", { style: { color: COLORS.ink }, className: "text-[12px] leading-relaxed font-medium" },
+          "Biggest leak: " + weakest.label.toLowerCase() + " \u2014 " + weakest.lost + " conversations stalled there."),
+        h("div", { style: { color: COLORS.slate }, className: "text-[11px] leading-relaxed mt-1" }, weakest.ask)
+      )
+    ),
+
+    // ---- Per advisor.
+    h("div", { style: { borderColor: COLORS.line }, className: "px-4 py-3.5" },
+      h("div", { style: { color: COLORS.slate }, className: "text-[10px] font-mono uppercase tracking-widest mb-2.5" },
+        "Per advisor"),
+      advisors.length === 0
+        ? h("div", { style: { color: COLORS.slate }, className: "text-xs" }, "No active advisors.")
+        : h("div", { className: "space-y-3" },
+            advisors.map(function (a) {
+              var events = (a.copied || 0) + (a.advanced || 0);
+              var ratio = coachRatio(a.copied || 0, a.advanced || 0);
+              var band = coachRelianceBand(ratio);
+              var myWeakest = coachWeakestGate(coachGateStats(a.transitions));
+              return h("div", { key: a.code },
+                h("div", { className: "flex items-baseline justify-between gap-2" },
+                  h("div", { style: { color: COLORS.ink }, className: "text-sm font-medium truncate" }, a.name),
+                  h("div", { style: { color: COLORS.slate }, className: "font-mono text-[10px] shrink-0" },
+                    (a.advanced || 0) + " advances")
+                ),
+                myWeakest && h("div", { style: { color: COLORS.slate }, className: "text-[11px] leading-relaxed mt-0.5" },
+                  "Stalling most at ",
+                  h("span", { style: { color: COLORS.emphasis } }, myWeakest.label.toLowerCase()),
+                  " (" + myWeakest.lost + " waiting)"),
+                events < COACH_MIN_ADVISOR_EVENTS
+                  ? h("div", { style: { color: COLORS.slate }, className: "text-[11px] leading-relaxed mt-0.5" },
+                      events + " script event" + (events === 1 ? "" : "s") + " so far \u2014 too early to read.")
+                  : h("div", { style: { color: COLORS.slate }, className: "text-[11px] leading-relaxed mt-0.5" },
+                      band.label + " (" + (a.copied || 0) + " copied of " + (a.advanced || 0) + ")")
+              );
+            })
+          )
+    ),
+
+    // ---- The footnote is load-bearing. It is what stops the reliance line
+    // being read as an effort score, which the step-level data says it is
+    // not: chase steps get copied roughly twice as often as main-line ones
+    // because that is where the exact wording is genuinely hard.
+    h("div", { style: { borderColor: COLORS.line }, className: "px-4 py-3" },
+      h("div", { style: { color: COLORS.slate }, className: "text-[10px] leading-relaxed" },
+        "The per-advisor line describes where the wording came from, not how hard anyone worked. Advisors reliably paste the follow-up lines and type the short conversational ones, so a low number usually means someone is mid-conversation in their own voice. The gates above are the coachable part.")
+    )
+  );
+}
+
 function ManagerAddSubmissionForm(props) {
   var roster = props.roster || [], onAdd = props.onAdd, onDone = props.onDone;
   // RULE 12: seven fields is exactly the kind of form nobody wants to
@@ -3541,7 +3883,7 @@ function isOneSignalConfigured() {
 }
  
 var APP_NAME = "Unit App";
-var APP_VERSION = "5.2.0-patch6";
+var APP_VERSION = "5.4.0-patch8";
  
 function isSupabaseConfigured() {
   return SUPABASE_URL.indexOf("YOUR-PROJECT") === -1 && SUPABASE_ANON_KEY.indexOf("YOUR-ANON") === -1;
@@ -6512,6 +6854,7 @@ function App() {
   var referralsState = useState([]); var referrals = referralsState[0], setReferrals = referralsState[1];
   var submissionsState = useState([]); var submissions = submissionsState[0], setSubmissions = submissionsState[1];
   var awardProgressState = useState([]); var awardProgress = awardProgressState[0], setAwardProgress = awardProgressState[1];
+  var coachingStatsState = useState(null); var coachingStats = coachingStatsState[0], setCoachingStats = coachingStatsState[1];
   var teamLoadingState = useState(false); var teamLoading = teamLoadingState[0], setTeamLoading = teamLoadingState[1];
   // Patch 6: null until referrals have come back from the server at least
   // once. Comparing against an empty list before the first load would
@@ -6637,6 +6980,12 @@ function App() {
     sb.rpc("get_award_progress").then(function(res) {
       if (res.data) setAwardProgress(res.data);
     });
+    // Aggregates only, and deliberately not awaited: a slow coaching read
+    // must never hold up the numbers the manager actually opened the view
+    // for. A missing RPC leaves coachingStats null and the card says so.
+    sb.rpc("get_coaching_stats").then(function(res) {
+      if (res.data) setCoachingStats(res.data);
+    }, function () {});
   };
  
   var loadRecruitmentData = async function () {
@@ -7538,6 +7887,7 @@ function App() {
         onApproveAdvisor: approveAdvisor, onRejectAdvisor: rejectAdvisor,
         myCode: myCode,
         awardProgress: awardProgress,
+        coachingStats: coachingStats,
         avatars: avatars, onSaveAvatar: saveAvatar,
         route: route, navigate: navigate, closeSheet: closeSheet,
         onAddManagerSubmission: function(advisorCode, serial, clientName, amount, nbAc, submittedDate, settledDate) {
