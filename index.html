@@ -86,9 +86,21 @@
  
   /* Bottom tab bar is fixed, so every scrollable page reserves room for it. */
   .has-bottom-nav { padding-bottom: calc(70px + env(safe-area-inset-bottom)); }
+
+  /* ---- Patch 6: the close celebration ----------------------------------
+     Reaching "done" is the single best thing that happens in this app and
+     it used to be a paragraph of text telling the advisor to go and do
+     data entry. `rise` brings the card up under its own weight; `sparkle`
+     drives the ring behind the seal. Both are listed in the
+     prefers-reduced-motion block below with everything else. */
+  @keyframes rise { from { opacity: 0; transform: translateY(22px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+  .rise { animation: rise 0.42s cubic-bezier(0.22, 1, 0.36, 1) both; }
+  @keyframes sparkle { 0% { transform: scale(0.6); opacity: 0; } 45% { opacity: 0.55; } 100% { transform: scale(1.9); opacity: 0; } }
+  .sparkle { animation: sparkle 1.5s ease-out infinite; }
  
   @media (prefers-reduced-motion: reduce) {
-    .skel, .spin, .bar-indeterminate, .sheet-in, .fade-in, .pop, .flash { animation: none !important; }
+    .skel, .spin, .bar-indeterminate, .sheet-in, .fade-in, .pop, .flash,
+    .rise, .sparkle { animation: none !important; }
   }
 </style>
 </head>
@@ -285,6 +297,47 @@ function daysSince(isoTimestamp) {
  
 function referralPayout(r) {
   return (r.signed_paid ? 500 : 0) + (r.coded_paid ? 1000 : 0) + (r.retained_paid ? 1500 : 0);
+}
+
+// ---- Patch 6: referral milestone change detection -----------------------
+// A manager ticking "contract signed" / "3 apps" / "retained 90" was
+// previously invisible to the advisor who made the referral — the money
+// simply appeared in a total with no event attached to it. These three
+// helpers turn a referral row into a stable set of milestone keys so the
+// app can tell "this is new since you last looked" from "you already know".
+// Amounts are read from the same literals referralPayout() and
+// receivableItems() use; nothing here computes a payout of its own.
+var REFERRAL_MILESTONES = [
+  { key: "signed", flag: "contract_signed", label: "Contract signed", amount: 500 },
+  { key: "coded", flag: "apps_3", label: "3 apps \u2014 coded", amount: 1000 },
+  { key: "retained", flag: "retained_90", label: "Retained 90 days", amount: 1500 }
+];
+
+function reachedMilestones(r) {
+  return REFERRAL_MILESTONES.filter(function (m) { return !!r[m.flag]; }).map(function (m) { return m.key; });
+}
+
+// Snapshot shape: { <referralId>: ["signed","coded"] }. Missing id = a
+// referral this device has never seen, which is treated as "everything on
+// it is new" only after the first snapshot exists for this advisor.
+function snapshotReferrals(list) {
+  var out = {};
+  (list || []).forEach(function (r) { out[String(r.id)] = reachedMilestones(r); });
+  return out;
+}
+
+function newReferralMilestones(list, seen) {
+  if (!seen) return [];
+  var out = [];
+  (list || []).forEach(function (r) {
+    var known = seen[String(r.id)] || [];
+    REFERRAL_MILESTONES.forEach(function (m) {
+      if (r[m.flag] && known.indexOf(m.key) === -1) {
+        out.push({ id: String(r.id), key: m.key, name: r.candidate_name || "Referral", label: m.label, amount: m.amount });
+      }
+    });
+  });
+  return out;
 }
  
 var LANE_MINIMUMS = { grind: 15 };
@@ -889,18 +942,16 @@ function notificationState() {
   } catch (e) { return "unsupported"; }
 }
  
-async function requestNotificationAccess() {
-  var state = notificationState();
-  if (state === "unsupported") return { ok: false, message: "This browser can't show reminders." };
-  if (state === "denied") return { ok: false, message: "Reminders are blocked for this site in your browser settings." };
-  if (state === "granted") return { ok: true };
-  try {
-    var res = await Notification.requestPermission();
-    if (res === "granted") return { ok: true };
-    return { ok: false, message: "No problem \u2014 the dashboard works exactly the same without reminders." };
-  } catch (e) { return { ok: false, message: "Couldn't ask for permission on this browser." }; }
-}
- 
+// Patch 6: requestNotificationAccess() used to live here and was the app's
+// SECOND route to Notification.requestPermission(), competing with
+// OneSignal's for the same origin-level grant. Whichever fired first
+// consumed the one chance to ask, so a decline on the dead dashboard
+// reminder permanently blocked the working digest. It is deleted rather
+// than relabelled: there is now one prompt, raised by enableDigestPush().
+//
+// This helper survives because it never prompts. It fires only when
+// permission has ALREADY been granted, which is why it is safe to call from
+// the approval poll and the referral-milestone watcher.
 function showLocalNotification(title, body) {
   try {
     if (notificationState() === "granted") new Notification(title, { body: body, tag: "bru-reminder" });
@@ -1048,23 +1099,42 @@ function AccountSheet(props) {
   var busyState = useState(false); var busy = busyState[0], setBusy = busyState[1];
   var msgState = useState(""); var msg = msgState[0], setMsg = msgState[1];
   var okState = useState(true); var ok = okState[0], setOk = okState[1];
- 
-  // RULE 13: this is the ONLY path to the browser permission prompt, and
-  // it is behind an explicit tap on the feature that needs it. Nothing is
-  // requested on load, on sign-in, or on first render of this sheet.
-  var enableReminders = async function () {
+  var digestOnState = useState(false); var digestOn = digestOnState[0], setDigestOn = digestOnState[1];
+  var digestLoadedState = useState(false); var digestLoaded = digestLoadedState[0], setDigestLoaded = digestLoadedState[1];
+
+  // Patch 6: this sheet used to own a "Daily logging reminder" switch that
+  // called Notification.requestPermission() directly, wrote br-reminders-on
+  // (which nothing ever read), fired one confirmation notification and then
+  // never sent anything again. Worse, it competed for the same origin-level
+  // permission as the working OneSignal digest — a decline here made the
+  // digest un-enablable on that device, and an accept here produced no push
+  // subscription at all, so the advisor believed reminders were on while the
+  // digest cron had no way to reach them. That control is gone. What follows
+  // is the real digest opt-in, moved here so notifications live in one place.
+  useEffect(function () {
+    if (!advisor.id || !isOneSignalConfigured()) { setDigestLoaded(true); return; }
+    var cancelled = false;
+    fetchDigestOptIn(advisor.id).then(function (res) {
+      if (cancelled) return;
+      setDigestOn(!!res.data);
+      setDigestLoaded(true);
+    });
+    return function () { cancelled = true; };
+  }, [advisor.id]);
+
+  // RULE 13 still holds: this is the ONLY path in the app to the browser
+  // permission prompt, and it is behind an explicit tap on the one feature
+  // that actually delivers something for it.
+  var toggleDigest = async function () {
+    if (busy || !advisor.id) return;
     setBusy(true); setMsg("");
-    var res = await requestNotificationAccess();
+    var res = digestOn ? await disableDigestPush(advisor.id) : await enableDigestPush(advisor.id);
     setBusy(false);
     setPerm(notificationState());
-    setOk(!!res.ok);
-    if (res.ok) {
-      lset("br-reminders-on", true);
-      setMsg("Reminders are on for this device.");
-      showLocalNotification("Battle River Unit", "Daily logging reminders are on.");
-    } else {
-      setMsg(res.message || "Reminders weren't enabled.");
-    }
+    if (res.error) { setOk(false); setMsg(res.error); return; }
+    setOk(true);
+    setDigestOn(!digestOn);
+    setMsg(digestOn ? "Digest turned off." : "You'll get one notification a day when something's overdue.");
   };
  
   var row = function (key, label, detail, onClick, tone) {
@@ -1098,16 +1168,28 @@ function AccountSheet(props) {
         style: { background: COLORS.parchment, borderColor: COLORS.line },
         className: "rounded-2xl border px-4 py-3.5"
       },
-        h("div", { style: { color: COLORS.ink }, className: "text-sm font-medium" }, "Daily logging reminder"),
+        h("div", { className: "flex items-center justify-between gap-3" },
+          h("div", { style: { color: COLORS.ink }, className: "text-sm font-medium" }, "Daily overdue digest"),
+          digestLoaded && isOneSignalConfigured() && h("span", {
+            style: {
+              background: digestOn ? "rgba(93,163,109,0.16)" : COLORS.parchment,
+              color: digestOn ? COLORS.good : COLORS.slate
+            },
+            className: "text-[10px] font-mono uppercase tracking-wide px-2 py-0.5 rounded-lg shrink-0"
+          }, digestOn ? "On" : "Off")
+        ),
         h("div", { style: { color: COLORS.slate }, className: "text-[11px] mt-0.5 leading-relaxed mb-2.5" },
-          perm === "granted"
-            ? "Your browser already allows reminders for this dashboard."
+          !isOneSignalConfigured()
+            ? "Push isn't configured for this deployment yet."
             : perm === "denied"
-              ? "Your browser is blocking reminders for this site. You'd need to re-allow them in site settings."
-              : "We only ask your browser for permission when you tap this \u2014 never on page load."),
-        perm !== "granted" && h(BusyButton, {
-          busy: busy, busyLabel: "Asking\u2026", label: "Turn on reminders",
-          onClick: enableReminders, disabled: perm === "denied" || perm === "unsupported",
+              ? "Your browser is blocking notifications for this site. You'd need to re-allow them in site settings before this can be turned on."
+              : perm === "unsupported"
+                ? "This browser can't show notifications."
+                : "One notification a day listing conversations that have gone 3+ days without a touch. Nothing is sent on a day with nothing overdue. We only ask your browser for permission when you tap this \u2014 never on page load."),
+        isOneSignalConfigured() && digestLoaded && h(BusyButton, {
+          busy: busy, busyLabel: "Working\u2026",
+          label: digestOn ? "Turn off the digest" : "Turn on the digest",
+          onClick: toggleDigest, disabled: (!digestOn && (perm === "denied" || perm === "unsupported")),
           className: "w-full py-2.5 rounded-xl text-white text-sm font-semibold active:scale-[0.98] transition-transform"
         }),
         msg && h("div", { style: { color: ok ? COLORS.good : COLORS.rust }, className: "text-[11px] mt-2" }, msg)
@@ -1377,9 +1459,34 @@ function WaitingApprovalScreen(props) {
     setChecking(false);
     if (res.error) { setCheckMsg(res.error); return; }
     if (res.approved) { setApproved(true); return; }
-    setCheckMsg("Still waiting \u2014 check back later.");
+    setCheckMsg("Still waiting \u2014 you can leave this open, it checks itself every few seconds.");
   };
  
+  // Patch 6: this screen used to sit still until the advisor thought to tap
+  // "Check again". A new advisor watching a static screen has no way to know
+  // whether they should wait ten seconds or ten hours, so most of them close
+  // the app and the manager's approval lands on nobody. Now it polls every
+  // 15s while the screen is open and flips itself the moment it's approved.
+  useEffect(function () {
+    if (approved) return;
+    var cancelled = false;
+    var iv = setInterval(function () {
+      onCheck().then(function (res) {
+        if (cancelled || !res || !res.approved) return;
+        clearInterval(iv);
+        setApproved(true);
+        setCheckMsg("");
+        // Best-effort only, and it NEVER prompts — a pending advisor has no
+        // push subscription yet and no reason to be asked for one. If they
+        // have already granted permission this reaches them with the tab in
+        // the background; otherwise the screen flip above is the signal.
+        showLocalNotification("Battle River Unit", "You're approved \u2014 set your PIN to get started.");
+      });
+    }, 15000);
+    return function () { cancelled = true; clearInterval(iv); };
+    // eslint-disable-next-line
+  }, [approved]);
+
   var submitPin = function () {
     if (pinBusy) return;
     if (pin.trim().length < 4) { setPinErr("PIN must be at least 4 digits."); return; }
@@ -1418,7 +1525,7 @@ function WaitingApprovalScreen(props) {
       h("div", { style: { color: COLORS.brass }, className: "text-[11px] tracking-[0.22em] uppercase font-mono" }, "Waiting for approval"),
       h("div", { style: { color: COLORS.ink }, className: "font-display text-2xl mt-1.5" }, pending.name),
       h("div", { style: { color: COLORS.slate }, className: "text-sm mt-2 leading-relaxed" },
-        "Your manager needs to approve this account before you can sign in and set your PIN.")
+        "Your manager needs to approve this account before you can sign in and set your PIN. Leave this screen open \u2014 it updates by itself the moment they do.")
     ),
     checkMsg && h("div", { style: { color: COLORS.slate }, className: "text-xs text-center mb-3" }, checkMsg),
     h("button", { onClick: check, disabled: checking, style: { background: COLORS.emphasis, opacity: checking ? 0.7 : 1 }, className: "w-full py-3 rounded-2xl text-white font-medium" }, checking ? "Checking\u2026" : "Check again"),
@@ -1548,6 +1655,13 @@ function AdvisorView(props) {
     myWeekDayLabels = props.myWeekDayLabels || [], monthBoards = props.monthBoards || { pipeline: [], grind: [], grosser: [] },
     myReferrals = props.myReferrals || [], currentStreak = props.currentStreak || 0, bestStreak = props.bestStreak || 0,
     onAddReferral = props.onAddReferral, lastSyncedAt = props.lastSyncedAt,
+    // Patch 6: the SAME computeReceivable() result the Manager view reads.
+    // Passed in rather than recomputed here so the advisor-facing figure
+    // and the manager-facing figure cannot drift apart again — there is
+    // now exactly one function that turns referrals + lane boards into
+    // pesos, and both screens call it with the same arguments.
+    myReceivable = props.myReceivable || { confirmed: 0, projected: 0, total: 0, items: [] },
+    referralUpdates = props.referralUpdates || [], onAckReferralUpdates = props.onAckReferralUpdates,
     section = props.section || "today", hasTeamData = !!props.hasTeamData;
  
   // RULE 12: a half-typed candidate name survives a tab switch, a back
@@ -1612,21 +1726,17 @@ function AdvisorView(props) {
   var dashOffset = Math.round(CIRC - (CIRC * progress) / 3);
   var earnedTotal = myReferrals.reduce(function (s, r) { return s + referralPayout(r); }, 0);
  
-  var referralOwed = myReferrals.reduce(function (s, r) {
-    var owed = 0;
-    if (r.contract_signed && !r.signed_paid) owed += 500;
-    if (r.apps_3 && !r.coded_paid) owed += 1000;
-    if (r.retained_90 && !r.retained_paid) owed += 1500;
-    return s + owed;
-  }, 0);
-  var laneStatus = LANES.map(function (lane) {
-    var rows = monthBoards[lane.key] || [];
-    var leader = qualifiedLaneLeader(rows, lane.key);
-    var leading = !!(leader && leader.code === myCode);
-    return { key: lane.key, label: lane.label, leading: leading, amount: LANE_AMOUNTS[lane.key] };
-  });
-  var projectedTotal = laneStatus.reduce(function (s, l) { return s + (l.leading ? l.amount : 0); }, 0);
-  var leadingLanes = laneStatus.filter(function (l) { return l.leading; });
+  // Patch 6: these three used to be computed locally, and drifted from the
+  // manager's numbers in two ways — the headline omitted projected lane
+  // money entirely, and the local lane check was missing the
+  // `leader[lane.key] > 0` guard that receivableItems() applies, so an
+  // all-zero lane showed the advisor as "Leading" for money the manager
+  // never saw. Both screens now read one computeReceivable() result.
+  var referralOwed = myReceivable.confirmed;
+  var projectedTotal = myReceivable.projected;
+  var leadingLanes = myReceivable.items
+    .filter(function (it) { return it.kind === "projected"; })
+    .map(function (it) { return { label: it.label.replace(/^Leading /, "") }; });
  
   // ---- RULE 9 + Jakob's Law -------------------------------------------
   // What used to be one very long scroll is now three bottom-tab
@@ -1813,23 +1923,70 @@ function AdvisorView(props) {
     )
     ],
     rewards: [
+      // Patch 6: the headline is now the SAME total the manager sees next
+      // to this advisor's name, and the confirmed/projected split sits
+      // directly under it so the number can never be read as "all of this
+      // is owed to me". Confirmed is money already earned; projected is a
+      // month-to-date lane lead that can still be taken by someone else.
       h("div", { style: { background: COLORS.card, borderColor: COLORS.line }, className: "rounded-2xl border p-4" },
       h("div", { className: "flex items-start justify-between" },
         h("div", null,
           h("div", { style: { color: COLORS.slate }, className: "text-[11px] uppercase tracking-wide font-mono" }, "Incentive receivable"),
-          h("div", { style: { color: COLORS.brass }, className: "font-display text-3xl mt-1" }, fmtPhp(referralOwed))
+          h("div", { style: { color: COLORS.brass }, className: "font-display text-3xl mt-1" }, fmtPhp(myReceivable.total))
         ),
-        h("div", { style: { color: COLORS.slate }, className: "text-[10px] text-right leading-relaxed max-w-[110px]" }, "confirmed \u2014 earned, not yet paid out")
+        h("div", { style: { color: COLORS.slate }, className: "text-[10px] text-right leading-relaxed max-w-[112px]" }, "confirmed + projected, this cycle")
       ),
-      projectedTotal > 0 && h("div", { style: { borderColor: COLORS.line }, className: "border-t mt-3 pt-3" },
-        h("div", { className: "flex items-center justify-between" },
-          h("div", { style: { color: COLORS.ink }, className: "text-sm font-medium" }, "+ " + fmtPhp(projectedTotal) + " projected"),
-          h("div", { style: { color: COLORS.slate }, className: "text-[10px]" }, "if leads hold to month end")
+
+      (referralOwed > 0 || projectedTotal > 0) && h("div", { style: { borderColor: COLORS.line }, className: "border-t mt-3 pt-3 space-y-2" },
+        h("div", { className: "flex items-center justify-between gap-3" },
+          h("div", { className: "flex items-center gap-2 min-w-0" },
+            h("span", { style: { background: COLORS.good, width: "7px", height: "7px", borderRadius: "50%", display: "inline-block", flexShrink: 0 } }),
+            h("span", { style: { color: COLORS.ink }, className: "text-sm font-medium" }, fmtPhp(referralOwed) + " confirmed")
+          ),
+          h("div", { style: { color: COLORS.slate }, className: "text-[10px] text-right shrink-0" }, "earned, not yet paid out")
         ),
-        h("div", { style: { color: COLORS.slate }, className: "text-[11px] mt-1" }, "Leading: " + leadingLanes.map(function (l) { return l.label; }).join(", "))
+        h("div", { className: "flex items-center justify-between gap-3" },
+          h("div", { className: "flex items-center gap-2 min-w-0" },
+            h("span", { style: { background: COLORS.brass, width: "7px", height: "7px", borderRadius: "50%", display: "inline-block", flexShrink: 0 } }),
+            h("span", { style: { color: COLORS.ink }, className: "text-sm font-medium" }, fmtPhp(projectedTotal) + " projected")
+          ),
+          h("div", { style: { color: COLORS.slate }, className: "text-[10px] text-right shrink-0" }, "only if the lead holds")
+        ),
+        projectedTotal > 0 && h("div", { style: { color: COLORS.slate }, className: "text-[11px] pt-0.5" },
+          "Leading: " + leadingLanes.map(function (l) { return l.label; }).join(", ") + " \u2014 can change until month end.")
       ),
       referralOwed === 0 && projectedTotal === 0 && h("div", { style: { color: COLORS.slate }, className: "text-xs mt-2" }, "Nothing confirmed yet \u2014 keep logging and referring to build this up.")
     ),
+
+      // Patch 6: a manager confirming a referral milestone used to be
+      // completely silent on the advisor's side. This card is the in-app
+      // half of that — it appears the first time the app sees a stage flag
+      // that wasn't there last time, and clears when acknowledged. Real
+      // push for this needs a server-side sender (see the release notes).
+      referralUpdates.length > 0 && h("div", {
+        style: { background: "rgba(93,163,109,0.10)", borderColor: COLORS.good },
+        className: "rounded-2xl border p-4"
+      },
+        h("div", { style: { color: COLORS.good }, className: "text-[11px] uppercase tracking-wide font-mono mb-2" },
+          referralUpdates.length === 1 ? "Referral milestone confirmed" : referralUpdates.length + " referral milestones confirmed"),
+        h("div", { className: "space-y-1.5 mb-3" },
+          referralUpdates.map(function (u, idx) {
+            return h("div", { key: idx, className: "flex items-baseline justify-between gap-3" },
+              h("div", { className: "min-w-0" },
+                h("div", { style: { color: COLORS.ink }, className: "text-sm font-medium truncate" }, u.name),
+                h("div", { style: { color: COLORS.slate }, className: "text-[11px]" }, u.label)
+              ),
+              h("div", { style: { color: COLORS.good }, className: "font-mono text-sm font-semibold shrink-0" }, "+" + fmtPhp(u.amount))
+            );
+          })
+        ),
+        h("button", {
+          type: "button",
+          onClick: onAckReferralUpdates,
+          style: { borderColor: COLORS.good, color: COLORS.good },
+          className: "w-full py-2 rounded-xl border text-sm font-semibold active:scale-[0.98] transition-transform"
+        }, "Got it")
+      ),
  
       h("div", null,
       h(SectionTitle, { label: "This month \u2014 three lanes" }),
@@ -2617,10 +2774,30 @@ function ManagerView(props) {
           );
         })
       ),
-      h("div", { style: { background: COLORS.emphasis }, className: "rounded-2xl px-4 py-3 flex items-center justify-between mt-2" },
-        h("span", { className: "text-white text-sm font-medium" }, "Total to release this cycle"),
-        h("span", { className: "text-white font-display text-lg" }, fmtPhp(activeRoster.reduce(function (s, r) { return s + computeReceivable(r.code, referrals, monthBoards).total; }, 0)))
-      )
+      // Patch 6: this used to be one line reading "Total to release this
+      // cycle" over a figure that INCLUDED projected lane money — money
+      // that is not releasable, because the lane lead can change until
+      // month end. Split into the releasable figure and the contingent one
+      // so nobody pays out against a projection by mistake.
+      (function () {
+        var teamRec = activeRoster.reduce(function (acc, r) {
+          var rec = computeReceivable(r.code, referrals, monthBoards);
+          acc.confirmed += rec.confirmed; acc.projected += rec.projected;
+          return acc;
+        }, { confirmed: 0, projected: 0 });
+        return h("div", { style: { background: COLORS.emphasis }, className: "rounded-2xl px-4 py-3 mt-2" },
+          h("div", { className: "flex items-center justify-between" },
+            h("span", { className: "text-white text-sm font-medium" }, "Confirmed \u2014 releasable now"),
+            h("span", { className: "text-white font-display text-lg" }, fmtPhp(teamRec.confirmed))
+          ),
+          h("div", { className: "flex items-center justify-between mt-1.5 pt-1.5", style: { borderTop: "1px solid rgba(255,255,255,0.16)" } },
+            h("span", { style: { color: "rgba(255,255,255,0.72)" }, className: "text-[12px]" }, "Projected \u2014 not yet earned"),
+            h("span", { style: { color: "rgba(255,255,255,0.72)" }, className: "font-mono text-sm" }, fmtPhp(teamRec.projected))
+          ),
+          h("div", { style: { color: "rgba(255,255,255,0.56)" }, className: "text-[10px] leading-relaxed mt-2" },
+            "Release the confirmed figure. Projected assumes every current lane lead holds to month end \u2014 do not pay against it.")
+        );
+      })()
     ),
     h("div", null,
       h(SectionTitle, { label: "Growth Investment Tracker" }),
@@ -3364,7 +3541,7 @@ function isOneSignalConfigured() {
 }
  
 var APP_NAME = "Unit App";
-var APP_VERSION = "5.1.0";
+var APP_VERSION = "5.2.0-patch6";
  
 function isSupabaseConfigured() {
   return SUPABASE_URL.indexOf("YOUR-PROJECT") === -1 && SUPABASE_ANON_KEY.indexOf("YOUR-ANON") === -1;
@@ -3678,7 +3855,7 @@ var STEPS = {
   done: {
     stage: "closing",
     title: "Closed!",
-    note: "Huwag kalimutan i-log sa Activity Dashboard: Client Closed. Then ask for referrals while the excitement is fresh.",
+    note: "Naka-log na sa Dashboard mo ang Client Closed \u2014 hindi mo na kailangan i-type ulit. Habang masaya pa siya, tanungin mo na kung sino pa ang pwede mong matulungan.",
     scripts: [],
     choices: [{ label: "Start a new conversation", next: "home" }]
   }
@@ -3988,6 +4165,10 @@ function toRemoteRow(advisorId, c) {
     client_name: c.name,
     current_step: c.step,
     appt_logged: !!c.apptLogged,
+    // Patch 6: mirrors appt_logged. Without a server-side flag, restoring a
+    // backup onto a new phone would replay every past close as a fresh
+    // Clients Closed +1 — the same double-count appt_logged already prevents.
+    closed_logged: !!c.closedLogged,
     created_at: c.created ? new Date(c.created).toISOString() : new Date().toISOString(),
     updated_at: c.updated ? new Date(c.updated).toISOString() : new Date().toISOString(),
     deleted_at: null
@@ -4010,6 +4191,7 @@ function fromRemoteRow(row) {
     name: row.client_name || "",
     step: step,
     apptLogged: !!row.appt_logged,
+    closedLogged: !!row.closed_logged,
     created: row.created_at ? Date.parse(row.created_at) : Date.now(),
     updated: row.updated_at ? Date.parse(row.updated_at) : Date.now()
   };
@@ -4921,33 +5103,15 @@ function SettingsScreen(props) {
   // Patch 3: daily digest opt-in. Loaded fresh whenever Settings opens for
   // this advisor \u2014 it's cheap, and keeps this screen honest if the opt-in
   // was changed from another device.
+  // Patch 6: read-only now. The control itself moved to Account so there is
+  // one place that can raise the browser permission prompt; this screen only
+  // reports whether it's currently on.
   var digestOptInState = useState(false); var digestOptIn = digestOptInState[0], setDigestOptIn = digestOptInState[1];
-  var digestBusyState = useState(false); var digestBusy = digestBusyState[0], setDigestBusy = digestBusyState[1];
-  var digestErrState = useState(null); var digestErr = digestErrState[0], setDigestErr = digestErrState[1];
  
   useEffect(function () {
     if (!advisor) return;
     fetchDigestOptIn(advisor.id).then(function (res) { setDigestOptIn(!!res.data); });
   }, [advisor && advisor.id]);
- 
-  function toggleDigest() {
-    if (digestBusy || !advisor) return;
-    setDigestErr(null);
-    setDigestBusy(true);
-    if (digestOptIn) {
-      disableDigestPush(advisor.id).then(function (res) {
-        setDigestBusy(false);
-        if (res.error) { setDigestErr(res.error); return; }
-        setDigestOptIn(false);
-      });
-    } else {
-      enableDigestPush(advisor.id).then(function (res) {
-        setDigestBusy(false);
-        if (res.error) { setDigestErr(res.error); return; }
-        setDigestOptIn(true);
-      });
-    }
-  }
  
   return h("div", { className: "max-w-md mx-auto pb-16" },
     h("div", {
@@ -5011,23 +5175,29 @@ function SettingsScreen(props) {
  
       h(ActivityLogStatusCard, { advisor: advisor }),
  
+      // Patch 6: notification settings used to live in two places — a real
+      // digest toggle here and a second, dead "Daily logging reminder"
+      // switch in Account that asked for the browser permission and then
+      // delivered nothing. Both prompts competed for the same origin-level
+      // permission, so the dead one could permanently block the live one.
+      // There is now exactly one control, in Account; this is a signpost to
+      // it that reports current state so the trip isn't wasted.
       isOneSignalConfigured() && h("div", null,
-        h("div", { style: { color: C.muted }, className: "text-[11px] font-mono uppercase tracking-widest mb-2.5" }, "Daily overdue digest"),
-        h("div", { style: { background: C.surface, borderColor: C.line }, className: "rounded-2xl border p-4 mb-6" },
-          h("div", { style: { color: C.muted }, className: "text-[12px] mb-3 leading-relaxed" },
-            "A once-a-day notification listing anything that's gone 3+ days without a touch \u2014 sent even if the app isn't open. Nothing sends if there's nothing overdue."),
-          digestErr && h("div", { style: { color: "#F5A38C" }, className: "text-[12px] mb-2" }, digestErr),
-          h("button", {
-            onClick: toggleDigest,
-            disabled: digestBusy,
-            style: {
-              background: digestOptIn ? C.surfaceAlt : C.gold,
-              borderColor: C.line,
-              color: digestOptIn ? C.text : COLORS.parchment,
-              opacity: digestBusy ? 0.6 : 1
-            },
-            className: "w-full py-2.5 rounded-xl border text-sm font-bold active:scale-[0.98] transition-transform"
-          }, digestBusy ? "Working\u2026" : (digestOptIn ? "\u2713 On \u2014 tap to turn off" : "Turn on daily digest"))
+        h("div", { style: { color: C.muted }, className: "text-[11px] font-mono uppercase tracking-widest mb-2.5" }, "Notifications"),
+        h("button", {
+          type: "button",
+          onClick: props.onOpenAccount,
+          style: { background: C.surface, borderColor: C.line },
+          className: "w-full text-left rounded-2xl border p-4 mb-6 flex items-center justify-between gap-3 active:scale-[0.99] transition-transform"
+        },
+          h("div", { className: "min-w-0" },
+            h("div", { style: { color: C.text }, className: "text-[14px] font-semibold mb-0.5" }, "Daily overdue digest"),
+            h("div", { style: { color: digestOptIn ? C.good : C.muted }, className: "text-[12px] leading-relaxed" },
+              digestOptIn
+                ? "On \u2014 manage it in Account."
+                : "Off \u2014 turn it on in Account.")
+          ),
+          h("span", { style: { color: C.muted }, className: "shrink-0" }, "\u203a")
         )
       ),
  
@@ -5468,6 +5638,112 @@ function MoreView(props) {
 // unmounted) so its background sync intervals keep running and a
 // half-typed name is still there when the advisor comes back.
 // =====================================================================
+// ---- Patch 6: the close celebration -------------------------------------
+// Three jobs, in this order:
+//   1. Mark the moment. Reaching "done" is the point of the whole 26 steps.
+//   2. Confirm the number landed, honestly — "logged", "will sync", or
+//      "no code assigned" — instead of asserting success and hoping.
+//   3. Ask for the referral while the advisor is still elated, and capture
+//      it straight into the Names List so it costs one tap and no navigation.
+// The referral goes to the Names List, NOT the Growth Investment tracker:
+// a name a happy client gives you is a prospect, and Growth Investment is
+// the recruitment track that pays ₱500/₱1,000/₱1,500 on contract-signed,
+// coded and retained-90. Filing one as the other would put client referrals
+// into a recruitment payout pipeline.
+function CloseCelebration(props) {
+  var name = props.name || "your client";
+  var status = props.status || "pending";
+  var refState = useState(""); var refName = refState[0], setRefName = refState[1];
+  var savedState = useState([]); var saved = savedState[0], setSaved = savedState[1];
+
+  useEscape(props.onClose, true);
+
+  function addOne() {
+    var nm = refName.trim();
+    if (!nm) return;
+    props.onAddProspect(nm);
+    setSaved(saved.concat([nm]));
+    setRefName("");
+  }
+
+  var statusLine = status === "logged"
+    ? { text: "Clients Closed +1 \u2014 logged to your Dashboard", color: COLORS.good }
+    : status === "queued"
+      ? { text: "Clients Closed +1 \u2014 will sync once you're back online", color: COLORS.brass }
+      : status === "no_code"
+        ? { text: "Couldn't log this \u2014 ask your manager to assign you a code", color: COLORS.rust }
+        : { text: "Logging to your Dashboard\u2026", color: COLORS.slate };
+
+  return h("div", {
+    className: "fixed inset-0 z-50 flex items-center justify-center px-5 fade-in overflow-y-auto",
+    style: { background: "rgba(8,11,17,0.86)" },
+    role: "dialog", "aria-modal": "true", "aria-label": "Client closed"
+  },
+    h("div", {
+      style: { background: COLORS.card, borderColor: COLORS.brass },
+      className: "rise relative w-full max-w-sm rounded-3xl border p-6 my-8"
+    },
+      h("div", { className: "flex flex-col items-center text-center" },
+        h("div", { className: "relative mb-5", style: { width: "88px", height: "88px" } },
+          h("div", {
+            className: "sparkle absolute inset-0 rounded-full",
+            style: { border: "2px solid " + COLORS.brass }
+          }),
+          h("div", {
+            className: "absolute inset-0 rounded-full flex items-center justify-center",
+            style: { background: "rgba(242,183,5,0.12)" }
+          }, h(BattleRiverMark, { size: 52, uid: "closed" }))
+        ),
+        h("div", { style: { color: COLORS.brass }, className: "text-[11px] tracking-[0.24em] uppercase font-mono" }, "Client closed"),
+        h("div", { style: { color: COLORS.ink }, className: "font-display text-3xl mt-1.5 leading-tight" }, name),
+        h("div", { style: { color: statusLine.color }, className: "text-[12px] font-mono mt-3 leading-relaxed" }, statusLine.text)
+      ),
+
+      h("div", { style: { borderColor: COLORS.line }, className: "border-t mt-6 pt-5" },
+        h("div", { style: { color: COLORS.ink }, className: "text-sm font-semibold mb-1" }, "Sino pa ang pwede mong matulungan?"),
+        h("div", { style: { color: COLORS.slate }, className: "text-[12px] leading-relaxed mb-3" },
+          "Ngayon ang pinakamagandang oras magtanong \u2014 habang masaya pa si " + name + ". Isulat mo lang yung pangalan, mapupunta agad sa Names List mo."),
+
+        h("div", { className: "flex gap-2" },
+          h("input", {
+            value: refName,
+            onChange: function (ev) { setRefName(ev.target.value); },
+            onKeyDown: function (ev) { if (ev.key === "Enter") addOne(); },
+            placeholder: "First name",
+            "aria-label": "Referral first name",
+            style: { background: COLORS.parchment, borderColor: COLORS.line, color: COLORS.ink },
+            className: "flex-1 min-w-0 px-4 py-3 rounded-2xl border outline-none text-base"
+          }),
+          h("button", {
+            type: "button",
+            onClick: addOne,
+            disabled: !refName.trim(),
+            style: { background: COLORS.brass, color: COLORS.parchment, opacity: refName.trim() ? 1 : 0.45 },
+            className: "px-5 py-3 rounded-2xl font-bold shrink-0 active:scale-[0.98] transition-transform"
+          }, "Add")
+        ),
+
+        saved.length > 0 && h("div", { className: "flex flex-wrap gap-1.5 mt-3" },
+          saved.map(function (n, i) {
+            return h("span", {
+              key: i,
+              style: { background: "rgba(45,212,191,0.14)", color: COLORS.good },
+              className: "text-[12px] px-2.5 py-1 rounded-lg"
+            }, "\u2713 " + n);
+          })
+        )
+      ),
+
+      h("button", {
+        type: "button",
+        onClick: props.onClose,
+        style: { borderColor: COLORS.line, color: COLORS.slate },
+        className: "w-full mt-5 py-3 rounded-2xl border text-sm font-medium active:scale-[0.99] transition-transform"
+      }, saved.length > 0 ? "Done \u2014 back to my chats" : "Skip for now")
+    )
+  );
+}
+
 function ScriptSection(props) {
   var advisor = props.advisor;
   var setAdvisor = props.onAdvisorPatch;   // used only by the code-backfill effect
@@ -5492,6 +5768,12 @@ function ScriptSection(props) {
   // this either way, this just makes that protection visible and
   // immediately actionable instead of an unexplained instant delete.
   var undoState = useState(null); var undoInfo = undoState[0], setUndoInfo = undoState[1];
+  // Patch 6: set the moment a conversation reaches "done" for the first
+  // time. Holds { name, convoId, status } where status tracks the dashboard
+  // bump ("pending" -> "logged" | "queued" | "no_code") so the celebration
+  // can tell the advisor the number actually landed rather than just
+  // asserting it did.
+  var celebrationState = useState(null); var celebration = celebrationState[0], setCelebration = celebrationState[1];
   var syncMetaState = useState(defaultSyncMeta()); var syncMeta = syncMetaState[0], setSyncMetaState = syncMetaState[1];
   var restoreOfferState = useState(null); var restoreOffer = restoreOfferState[0], setRestoreOffer = restoreOfferState[1];
   var prospectsState = useState([]); var prospects = prospectsState[0], setProspects = prospectsState[1];
@@ -5769,9 +6051,15 @@ function ScriptSection(props) {
   var active = null;
   for (var i = 0; i < convos.length; i++) { if (convos[i].id === activeId) active = convos[i]; }
  
+  // Patch 6: the flag write was always here; what was missing was anything
+  // that read it. onTourDone() lifts that into App, which decides where to
+  // land — popping the More sheet if the tour was opened deliberately, or
+  // simply revealing the Chats list underneath if it auto-showed on first
+  // run (where there is no pushed history entry to pop).
   function finishOnboarding() {
     if (advisor) lset("br-onboarding-seen-" + advisor.id, true);
-    props.onBack();
+    if (props.onTourDone) props.onTourDone();
+    else props.onBack();
   }
  
   function startNew() {
@@ -5796,6 +6084,8 @@ function ScriptSection(props) {
     if (stepKey === "home") { goBack(); return; }
     var changedId = null;
     var justConfirmedAppt = false;
+    var justClosed = false;
+    var closedName = "";
     var fromStep = null;
     setConvos(convos.map(function (c) {
       if (c.id !== activeId) return c;
@@ -5806,7 +6096,16 @@ function ScriptSection(props) {
       // so revisiting or restarting a conversation can never double-bump
       // Appointments Set once it's been logged.
       if (stepKey === "appt_confirm" && !c.apptLogged) justConfirmedAppt = true;
-      return Object.assign({}, c, { step: stepKey, updated: Date.now(), apptLogged: c.apptLogged || justConfirmedAppt });
+      // Patch 6: same guard, same shape, for the close. Reaching "done" used
+      // to log nothing at all — the step note just told the advisor to go
+      // open the dashboard and type it in themselves.
+      if (stepKey === "done" && !c.closedLogged) { justClosed = true; closedName = c.name; }
+      return Object.assign({}, c, {
+        step: stepKey,
+        updated: Date.now(),
+        apptLogged: c.apptLogged || justConfirmedAppt,
+        closedLogged: c.closedLogged || justClosed
+      });
     }));
     if (changedId) {
       markDirty(advisor.id, changedId);
@@ -5829,6 +6128,21 @@ function ScriptSection(props) {
           if (res.ok) flash("Logged to your Dashboard \u2014 Appointments Set +1");
           else if (res.reason === "no_code") flash("Couldn't log to Dashboard \u2014 ask your manager to assign you a code");
           else flash("Appointments Set +1 \u2014 will sync to your Dashboard once back online");
+        });
+      }
+      if (justClosed) {
+        logEvent("script_client_closed", advisor.code, { convo_id: changedId });
+        // No flash here on purpose — the celebration screen below carries the
+        // confirmation. A toast that slides away in 1.6s is the wrong weight
+        // for the single best thing that happens in this app.
+        setCelebration({ name: closedName, convoId: changedId, status: "pending" });
+        bumpDashboardMetric(advisor.code, "closed", 1).then(function (res) {
+          setCelebration(function (prev) {
+            if (!prev || prev.convoId !== changedId) return prev;
+            return Object.assign({}, prev, {
+              status: res.ok ? "logged" : (res.reason === "no_code" ? "no_code" : "queued")
+            });
+          });
         });
       }
     }
@@ -5895,21 +6209,33 @@ function ScriptSection(props) {
   // what kills the habit this is meant to build. A soft (non-blocking)
   // duplicate check just changes the confirmation toast; it never stops
   // the save.
-  function addProspect(name) {
+  function addProspect(name, opts) {
     var nm = name.trim();
     if (!nm) { flash("Enter a name first"); return; }
+    // Patch 6: the celebration calls this too, and it is NOT the quick-add
+    // sheet. Closing a sheet that was never open resolves to closeSheet(),
+    // which is history.back() — that would navigate out from under the
+    // celebration mid-tap. `fromSheet` keeps the sheet-specific cleanup on
+    // the sheet's own path.
+    var fromSheet = !opts || opts.fromSheet !== false;
     var dupe = prospects.some(function (p) { return p.name.trim().toLowerCase() === nm.toLowerCase(); });
     var now = Date.now();
     var prospect = { id: now + "-" + Math.random().toString(36).slice(2, 8), name: nm, created: now, updated: now };
     setProspects([prospect].concat(prospects));
     markProspectDirty(advisor.id, prospect.id);
     refreshProspectSyncMeta();
-    setDraft(advisor.id, "quickadd", "");
-    setQuickAddOpen(false);
-    flash(dupe ? "Added \u2014 similar name already on your list" : "Added to your names list");
+    if (fromSheet) {
+      setDraft(advisor.id, "quickadd", "");
+      setQuickAddOpen(false);
+      flash(dupe ? "Added \u2014 similar name already on your list" : "Added to your names list");
+    }
     bumpDashboardMetric(advisor.code, "prospecting", 1);
     // id only, never the name — see the PRIVACY note on logEvent.
-    logEvent("script_prospect_added", advisor.code, { prospect_id: prospect.id, duplicate: !!dupe });
+    logEvent("script_prospect_added", advisor.code, {
+      prospect_id: prospect.id,
+      duplicate: !!dupe,
+      source: (opts && opts.source) || "quickadd"
+    });
   }
  
   // Promoting is just starting a normal conversation at step "start" —
@@ -6075,7 +6401,15 @@ function ScriptSection(props) {
   // Without it they render in the browser default: black on near-black.
   var WRAP = { color: C.text };
  
-  var overlays = [toastEl, undoBannerEl, fabEl, quickAddSheetEl];
+  var celebrationEl = celebration ? h(CloseCelebration, {
+    key: "celebrate-" + celebration.convoId,
+    name: celebration.name,
+    status: celebration.status,
+    onAddProspect: function (nm) { addProspect(nm, { fromSheet: false, source: "close_referral" }); },
+    onClose: function () { setCelebration(null); }
+  }) : null;
+
+  var overlays = [toastEl, undoBannerEl, fabEl, quickAddSheetEl, celebrationEl];
  
   if (screen === "onboarding") {
     return h("div", { style: WRAP }, h(OnboardingScreen, { onFinish: finishOnboarding }), toastEl);
@@ -6093,7 +6427,8 @@ function ScriptSection(props) {
         onSyncProspectsNow: syncProspectsNow,
         onCheckProspectRestore: checkProspectRestoreManually,
         onFlash: flash,
-        onShowTour: props.onShowTour
+        onShowTour: props.onShowTour,
+        onOpenAccount: props.onOpenAccount
       }),
       overlays
     );
@@ -6178,6 +6513,15 @@ function App() {
   var submissionsState = useState([]); var submissions = submissionsState[0], setSubmissions = submissionsState[1];
   var awardProgressState = useState([]); var awardProgress = awardProgressState[0], setAwardProgress = awardProgressState[1];
   var teamLoadingState = useState(false); var teamLoading = teamLoadingState[0], setTeamLoading = teamLoadingState[1];
+  // Patch 6: null until referrals have come back from the server at least
+  // once. Comparing against an empty list before the first load would
+  // report every existing milestone as brand new.
+  var referralsLoadedState = useState(false); var referralsLoaded = referralsLoadedState[0], setReferralsLoaded = referralsLoadedState[1];
+  var referralSeenState = useState(null); var referralSeen = referralSeenState[0], setReferralSeen = referralSeenState[1];
+  // Patch 6: the onboarding flag was being written and never read. Held in
+  // state (not read straight from localStorage at render time) so that
+  // finishing the tour re-renders the tab underneath it.
+  var tourSeenState = useState(false); var tourSeen = tourSeenState[0], setTourSeen = tourSeenState[1];
   // ---- RULE 15: the route IS the state. Every shareable destination is
   // reconstructable from the URL, so a notification, a pasted link or a
   // search result lands on the exact entity instead of the home dashboard.
@@ -6289,6 +6633,7 @@ function App() {
     setReferrals(results[1].data || []);
     setSubmissions(results[2].data || []);
     setTeamLoading(false);
+    if (!results[1].error) setReferralsLoaded(true);
     sb.rpc("get_award_progress").then(function(res) {
       if (res.data) setAwardProgress(res.data);
     });
@@ -6344,12 +6689,23 @@ function App() {
   // The script half renders whenever one of its destinations is showing.
   // It stays mounted (hidden) the rest of the time so its two sync
   // outboxes keep draining and a half-typed name survives a tab switch.
+  // Patch 6: the tour now auto-shows the first time an advisor lands on
+  // Chats, and only there. Its three slides are all script-tool concepts
+  // (copy the line, follow-up colours, Names List), so firing it over the
+  // Today dashboard would explain a screen the advisor isn't looking at.
+  // Guarded on route.convo so a deep link straight into a conversation
+  // still opens that conversation rather than being intercepted.
+  var autoTour = view === "chats" && !route.convo && !!myIdentity && !tourSeen;
   var scriptScreen = view === "names" ? "names"
     : (view === "more" && route.sheet === "script") ? "settings"
     : (view === "more" && route.sheet === "tour") ? "onboarding"
+    : autoTour ? "onboarding"
     : "home";
   var scriptVisible = view === "chats" || view === "names"
     || (view === "more" && (route.sheet === "script" || route.sheet === "tour"));
+  // The auto-tour renders inside the script half, so the bottom nav and
+  // header stay put underneath it — it is a first-run screen, not a modal
+  // takeover, and tapping another tab dismisses it like any other screen.
  
   useEffect(function () {
     if (managerOnly && !isManager && myIdentity) setShowManagerGate(true);
@@ -6868,6 +7224,66 @@ function App() {
  
   var myReferrals = referrals.filter(function (r) { return r.recipient_code === myCode; });
   var mySubmissions = submissions.filter(function (s) { return s.advisor_code === myCode; });
+
+  // ---- Patch 6: one receivable figure, computed once ---------------------
+  // The advisor's Rewards card and the manager's per-advisor row now read
+  // this same value. Anything that changes how incentive money is totalled
+  // has to change computeReceivable() and therefore changes both screens
+  // together — which is precisely what stopped being true before.
+  var myReceivable = computeReceivable(myCode, referrals, monthBoards);
+
+  // ---- Patch 6: referral milestone acknowledgement -----------------------
+  // Seeded silently the first time this advisor's referrals load on this
+  // device, so an advisor installing the app today doesn't get a wall of
+  // "confirmed!" cards for milestones from three months ago.
+  var referralSeenKey = myCode ? "br-referral-seen-" + myCode : null;
+  useEffect(function () {
+    if (!referralSeenKey || !referralsLoaded) return;
+    var stored = lget(referralSeenKey, null);
+    if (stored === null) {
+      var seeded = snapshotReferrals(myReferrals);
+      lset(referralSeenKey, seeded);
+      setReferralSeen(seeded);
+      return;
+    }
+    setReferralSeen(function (prev) { return prev === null ? stored : prev; });
+    // eslint-disable-next-line
+  }, [referralSeenKey, referralsLoaded]);
+
+  var referralUpdates = newReferralMilestones(myReferrals, referralSeen);
+
+  // A local notification here is best-effort and deliberately silent about
+  // permission: it fires only if the advisor has ALREADY granted it via the
+  // digest toggle. It never prompts — see the note on requestPermission
+  // collisions in the release notes.
+  var referralUpdateSig = referralUpdates.map(function (u) { return u.id + ":" + u.key; }).join(",");
+  useEffect(function () {
+    if (!referralUpdateSig) return;
+    var n = referralUpdates.length;
+    showLocalNotification(
+      "Battle River Unit",
+      n === 1
+        ? referralUpdates[0].name + " \u2014 " + referralUpdates[0].label + " confirmed."
+        : n + " of your referrals hit a new milestone."
+    );
+    // eslint-disable-next-line
+  }, [referralUpdateSig]);
+
+  function ackReferralUpdates() {
+    if (!referralSeenKey) return;
+    var next = snapshotReferrals(myReferrals);
+    lset(referralSeenKey, next);
+    setReferralSeen(next);
+  }
+
+  // ---- Patch 6: the tour flag is finally read ----------------------------
+  // Written since the tour shipped, never checked, so three slides that
+  // explain the whole mental model were reaching only advisors who went
+  // looking for them under More.
+  useEffect(function () {
+    if (!myIdentity) { setTourSeen(false); return; }
+    setTourSeen(!!lget("br-onboarding-seen-" + myIdentity.id, false));
+  }, [myIdentity && myIdentity.id]);
  
   var last7 = [0, 1, 2, 3, 4, 5, 6].map(function (i) { return todayStr(-6 + i); });
   var trendData = last7.map(function (d) {
@@ -7068,7 +7484,15 @@ function App() {
           onCloseQuickAdd: closeSheet,
           onOpenNames: function () { navigate({ view: "names", convo: null, sheet: null }, true); },
           onOpenScriptSettings: function () { navigate({ view: "more", sheet: "script", convo: null }, true); },
+          onOpenAccount: function () { navigate({ sheet: "account" }, true); },
           onShowTour: function () { navigate({ view: "more", sheet: "tour" }, true); },
+          onTourDone: function () {
+            setTourSeen(true);
+            // Only the deliberate More → tour route pushed a history entry;
+            // the first-run auto-tour did not, so popping there would walk
+            // the advisor out of the app instead of into their chat list.
+            if (route.sheet === "tour") goBackOne();
+          },
           onChangeIdentity: function () { navigate({ sheet: null }, false); setSwitching(true); },
           onAddAdvisor: function () { navigate({ view: "more", sheet: "script" }, true); }
         })
@@ -7096,6 +7520,7 @@ function App() {
         onRefresh: function () { loadTeamData(); refreshMyEntries(myCode); },
         myWeekDayLabels: myWeekDayLabels, monthBoards: monthBoards, myReferrals: myReferrals,
         currentStreak: currentStreak, bestStreak: bestStreak, onAddReferral: function (name) { return addReferral(name, myCode); },
+        myReceivable: myReceivable, referralUpdates: referralUpdates, onAckReferralUpdates: ackReferralUpdates,
         lastSyncedAt: lastSyncedAt,
         awardProgress: awardProgress,
         hasTeamData: teamEntries.length > 0,
