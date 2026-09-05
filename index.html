@@ -1248,7 +1248,7 @@ function AccountSheet(props) {
         src: props.avatarSrc, name: advisor.name, onSave: props.onSaveAvatar
       }),
       row("switch", "Switch advisor or role", "Sign in as someone else on this device", props.onSwitch),
-      !isManager && row("mgr", "Unlock manager tools", "Needs the manager PIN", props.onManagerTools),
+      !isManager && row("mgr", "Unlock manager tools", "Needs your PIN and manager access", props.onManagerTools),
       props.onExport && row("export", "Export last 60 days as CSV", "Opens the export sheet in Manager view", props.onExport),
  
       h("div", {
@@ -1620,20 +1620,33 @@ function WaitingApprovalScreen(props) {
   );
 }
  
+// Patch 11: the gate returns WHY it refused. Telling someone their PIN is
+// wrong when the real answer is "you aren't a manager" would have them
+// retrying until the lockout fires.
+function managerGateMessage(code, data) {
+  if (code === "not_manager") return "This account doesn't have manager access. Ask the unit manager to grant it.";
+  if (code === "locked") {
+    var until = data && data.locked_until ? new Date(data.locked_until) : null;
+    return until
+      ? "Too many wrong attempts. Try again after " + until.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) + "."
+      : "Too many wrong attempts. Try again in a few minutes.";
+  }
+  if (code === "no_pin_set") return "Set your advisor PIN by signing in first, then unlock manager tools.";
+  if (code === "inactive") return "This account is inactive or not yet approved.";
+  if (code === "not_found") return "Couldn't find this account on the roster.";
+  if (code === "pin_too_short") return "PIN must be at least 4 digits.";
+  if (code === "missing_credentials" || code === "bad_pin") return "Incorrect PIN.";
+  return "Couldn't unlock manager tools. Try again.";
+}
+ 
 function ManagerGate(props) {
-  var hasPin = props.hasPin, onSubmit = props.onSubmit, onClose = props.onClose;
+  var flagged = props.flagged, onSubmit = props.onSubmit, onClose = props.onClose;
   var pinState = useState(""); var pin = pinState[0], setPin = pinState[1];
-  var confirmState = useState(""); var confirm = confirmState[0], setConfirm = confirmState[1];
   var errorState = useState(""); var error = errorState[0], setError = errorState[1];
   var submit = async function () {
-    if (!hasPin) {
-      if (!/^\d{4}$/.test(pin)) { setError("Choose a 4-digit PIN."); return; }
-      if (pin !== confirm) { setError("PINs don't match."); return; }
-      await onSubmit(pin);
-    } else {
-      var ok = await onSubmit(pin);
-      if (!ok) { setError("Incorrect PIN."); setPin(""); }
-    }
+    if (pin.length < 4) { setError("Enter your 4-digit PIN."); return; }
+    var res = await onSubmit(pin);
+    if (!res || !res.ok) { setError((res && res.message) || "Incorrect PIN."); setPin(""); }
   };
   var busyState = useState(false); var busy = busyState[0], setBusy = busyState[1];
   var guarded = async function () {
@@ -1642,26 +1655,23 @@ function ManagerGate(props) {
     try { await submit(); } finally { setBusy(false); }
   };
   return h(ModalShell, {
-    title: hasPin ? "Manager access" : "Set up manager access",
-    subtitle: hasPin ? "Enter the manager PIN." : "Set this once — anyone with it can see every advisor's history.",
+    title: "Manager access",
+    subtitle: flagged
+      ? "Enter your own PIN \u2014 the same one you sign in with."
+      : "Enter your own PIN. Manager access also has to be granted to your account.",
     onClose: onClose
   },
     h("div", null,
       h("input", {
-        value: pin, onChange: function (ev) { setPin(ev.target.value.replace(/\D/g, "").slice(0, 4)); }, inputMode: "numeric", autoFocus: true, placeholder: "••••",
-        style: { borderColor: COLORS.line, background: COLORS.parchment, color: COLORS.ink, letterSpacing: "0.5em" },
-        className: "w-full px-4 py-3 rounded-2xl border outline-none focus:ring-2 text-center text-xl font-mono mb-2"
-      }),
-      !hasPin && h("input", {
-        value: confirm, onChange: function (ev) { setConfirm(ev.target.value.replace(/\D/g, "").slice(0, 4)); }, onKeyDown: function (ev) { if (ev.key === "Enter") submit(); }, inputMode: "numeric", placeholder: "Confirm PIN",
+        value: pin, onChange: function (ev) { setPin(ev.target.value.replace(/\D/g, "").slice(0, 4)); }, onKeyDown: function (ev) { if (ev.key === "Enter") guarded(); }, inputMode: "numeric", autoFocus: true, placeholder: "••••",
         style: { borderColor: COLORS.line, background: COLORS.parchment, color: COLORS.ink, letterSpacing: "0.5em" },
         className: "w-full px-4 py-3 rounded-2xl border outline-none focus:ring-2 text-center text-xl font-mono mb-2"
       }),
       error && h("div", { style: { color: COLORS.rust }, className: "text-xs mb-2" }, error),
       h("div", { className: "mt-2" },
         h(BusyButton, {
-          busy: busy, busyLabel: hasPin ? "Checking\u2026" : "Saving\u2026",
-          label: hasPin ? "Unlock" : "Set PIN & continue", onClick: guarded
+          busy: busy, busyLabel: "Checking\u2026",
+          label: "Unlock", onClick: guarded
         }))
     )
   );
@@ -3959,7 +3969,7 @@ function isOneSignalConfigured() {
 }
  
 var APP_NAME = "Unit App";
-var APP_VERSION = "5.6.0-patch10";
+var APP_VERSION = "5.7.0-patch11";
  
 function isSupabaseConfigured() {
   return SUPABASE_URL.indexOf("YOUR-PROJECT") === -1 && SUPABASE_ANON_KEY.indexOf("YOUR-ANON") === -1;
@@ -6399,12 +6409,12 @@ function MoreView(props) {
     h("div", { className: "space-y-2 mb-7" },
       h(MoreRow, {
         glyph: "\u2691", label: "Manager tools",
-        hint: props.isManager ? "Roster, submissions, referrals, targets" : "PIN required",
+        hint: props.isManager ? "Roster, submissions, referrals, targets" : "Your PIN required",
         onClick: function () { if (props.isManager) props.onGo("manager"); else props.onManagerTools(); }
       }),
       h(MoreRow, {
         glyph: "\u263A", label: "Recruitment",
-        hint: props.isManager ? "ACES scorecard and forum events" : "PIN required",
+        hint: props.isManager ? "ACES scorecard and forum events" : "Your PIN required",
         onClick: function () { if (props.isManager) props.onGo("recruitment"); else props.onManagerTools(); }
       })
     ),
@@ -7344,7 +7354,11 @@ function App() {
   var pendingSelfState = useState(lget("br-pending-advisor")); var pendingSelf = pendingSelfState[0], setPendingSelfState = pendingSelfState[1];
   var rosterState = useState([]); var roster = rosterState[0], setRoster = rosterState[1];
   var targetsState = useState({}); var targets = targetsState[0], setTargets = targetsState[1];
-  var hasPinState = useState(false); var hasManagerPin = hasPinState[0], setHasManagerPin = hasPinState[1];
+  // Patch 11. The old flag asked "does a shared manager PIN exist in
+  // settings?" — a question about the whole workspace. This one asks
+  // "is the signed-in advisor flagged as a manager?", a question about a
+  // person, which is the only kind the new gate is willing to answer.
+  var flaggedState = useState(false); var amFlaggedManager = flaggedState[0], setAmFlaggedManager = flaggedState[1];
   var isManagerState = useState(!!lget("is-manager")); var isManager = isManagerState[0], setIsManager = isManagerState[1];
   // The manager's PIN itself, kept ONLY in memory (never localStorage,
   // never persisted) — cleared on every page reload by design. Every
@@ -7438,12 +7452,11 @@ function App() {
     (async function () {
       var results = await Promise.all([
         sb.from("advisors").select("*").order("name"),
-        sb.from("targets").select("*"),
-        sb.rpc("has_manager_pin")
+        sb.from("targets").select("*")
       ]);
       if (cancelled) return;
-      var rosterRes = results[0], targetRes = results[1], pinRes = results[2];
-      if (rosterRes.error || targetRes.error || pinRes.error) {
+      var rosterRes = results[0], targetRes = results[1];
+      if (rosterRes.error || targetRes.error) {
         setDbError("Couldn't reach the database. Check that your Supabase URL and key are filled in at the top of index.html, and that schema.sql has been run.");
         setLoading(false);
         logEvent("db_error", myIdentity && myIdentity.code, { retry_attempt: reloadTick });
@@ -7454,7 +7467,12 @@ function App() {
       var tMap = {};
       (targetRes.data || []).forEach(function (t) { tMap[t.stage] = t.daily_target; });
       setTargets(tMap);
-      setHasManagerPin(!!pinRes.data);
+      // Whether this advisor is FLAGGED as a manager is public information
+      // and only decides whether the unlock screen is worth showing. It
+      // authorizes nothing on its own: every write still re-verifies the
+      // PIN server-side against this same flag.
+      var meRow = myIdentity ? (rosterRes.data || []).filter(function (r) { return r.id === myIdentity.id; })[0] : null;
+      setAmFlaggedManager(!!(meRow && meRow.is_manager));
  
       if (myIdentity) await refreshMyEntries(myIdentity.code);
       if (!cancelled) setLoading(false);
@@ -7525,7 +7543,7 @@ function App() {
     setReferrals(referrals.map(function (r) { return r.id === id ? Object.assign({}, r, patch) : r; }));
     try {
       var pin = await requireManagerPin();
-      var res = await sb.rpc("admin_update_referral", { p_manager_pin: pin, p_referral_id: id, p_field: field, p_value: value });
+      var res = await sb.rpc("admin_update_referral", { p_actor_id: myIdentity.id, p_pin: pin, p_referral_id: id, p_field: field, p_value: value });
       if (res.error || !(res.data && res.data.ok)) { setReferrals(previous); window.alert("Couldn't save that change \u2014 try again."); }
     } catch (e) { setReferrals(previous); }
   };
@@ -7535,7 +7553,7 @@ function App() {
     setReferrals(referrals.filter(function (r) { return r.id !== id; }));
     try {
       var pin = await requireManagerPin();
-      var res = await sb.rpc("admin_delete_referral", { p_manager_pin: pin, p_referral_id: id });
+      var res = await sb.rpc("admin_delete_referral", { p_actor_id: myIdentity.id, p_pin: pin, p_referral_id: id });
       if (res.error || !(res.data && res.data.ok)) {
         setReferrals(previous);
         window.alert("Couldn't remove that candidate \u2014 the database rejected it.");
@@ -7703,11 +7721,11 @@ function App() {
   var managerCreateAdvisor = async function (info) {
     var pin;
     try { pin = await requireManagerPin(); } catch (e) { return { ok: false, message: "Manager PIN required." }; }
-    var res = await sb.rpc("admin_create_advisor", { p_manager_pin: pin, p_name: info.name, p_code: info.code });
+    var res = await sb.rpc("admin_create_advisor", { p_actor_id: myIdentity.id, p_pin: pin, p_name: info.name, p_code: info.code });
     if (res.error || !(res.data && res.data.ok)) {
       var err = res.data && res.data.error;
       var msg = err === "duplicate_code" ? "That code is already taken — pick another."
-        : err === "bad_pin" ? "Wrong manager PIN — try again."
+        : err ? managerGateMessage(err, res.data)
         : "Couldn't save. Try again.";
       return { ok: false, message: msg };
     }
@@ -7723,12 +7741,12 @@ function App() {
   var approveAdvisor = async function (id, code) {
     var pin;
     try { pin = await requireManagerPin(); } catch (e) { return { ok: false, message: "Manager PIN required." }; }
-    var res = await sb.rpc("admin_approve_advisor", { p_manager_pin: pin, p_advisor_id: id, p_code: code || null });
+    var res = await sb.rpc("admin_approve_advisor", { p_actor_id: myIdentity.id, p_pin: pin, p_advisor_id: id, p_code: code || null });
     if (res.error || !(res.data && res.data.ok)) {
       var err = res.data && res.data.error;
       var msg = err === "duplicate_code" ? "That code is already taken — pick another."
         : err === "missing_code" ? "Assign a code before approving."
-        : err === "bad_pin" ? "Wrong manager PIN — try again."
+        : err ? managerGateMessage(err, res.data)
         : "Couldn't save. Try again.";
       return { ok: false, message: msg };
     }
@@ -7746,7 +7764,7 @@ function App() {
     setRoster(roster.filter(function (r) { return r.id !== id; }));
     try {
       var pin = await requireManagerPin();
-      var res = await sb.rpc("admin_reject_advisor", { p_manager_pin: pin, p_advisor_id: id });
+      var res = await sb.rpc("admin_reject_advisor", { p_actor_id: myIdentity.id, p_pin: pin, p_advisor_id: id });
       if (res.error || !(res.data && res.data.ok)) setRoster(previous);
     } catch (e) { setRoster(previous); }
   };
@@ -7776,7 +7794,7 @@ function App() {
     setRoster(roster.map(function (r) { return r.code === code ? Object.assign({}, r, { active: active }) : r; }));
     try {
       var pin = await requireManagerPin();
-      var res = await sb.rpc("admin_set_advisor_active", { p_manager_pin: pin, p_code: code, p_active: active });
+      var res = await sb.rpc("admin_set_advisor_active", { p_actor_id: myIdentity.id, p_pin: pin, p_code: code, p_active: active });
       if (res.error || !(res.data && res.data.ok)) setRoster(previous);
     } catch (e) { setRoster(previous); }
   };
@@ -7815,7 +7833,8 @@ function App() {
     try {
       var pin = await requireManagerPin();
       var res = await sb.rpc("admin_add_submission", {
-        p_manager_pin: pin,
+        p_actor_id: myIdentity.id,
+        p_pin: pin,
         p_advisor_code: advisorCode,
         p_app_serial: serial,
         p_client_name: clientName || null,
@@ -7826,7 +7845,9 @@ function App() {
       });
       if (res.error || (res.data && !res.data.ok)) {
         var err = (res.data && res.data.error) || (res.error && res.error.message) || "Couldn't save.";
-        if (err === "bad_pin") return { ok: false, message: "Wrong manager PIN." };
+        if (err === "bad_pin" || err === "not_manager" || err === "locked" || err === "no_pin_set" || err === "inactive") {
+          return { ok: false, message: managerGateMessage(err, res.data) };
+        }
         if (err === "duplicate_serial") return { ok: false, message: "This serial number is already logged." };
         if (err === "invalid_amount") return { ok: false, message: "Enter a valid FYP amount." };
         if (err === "nb_ac_exceeds_amount") return { ok: false, message: "NB AC cannot exceed the FYP amount." };
@@ -7852,7 +7873,7 @@ function App() {
     }));
     try {
       var pin = await requireManagerPin();
-      var res = await sb.rpc("admin_set_submission_settled", { p_manager_pin: pin, p_submission_id: id, p_settled: settled });
+      var res = await sb.rpc("admin_set_submission_settled", { p_actor_id: myIdentity.id, p_pin: pin, p_submission_id: id, p_settled: settled });
       sb.rpc("get_award_progress").then(function(r) { if (r.data) setAwardProgress(r.data); });
       if (res.error || !(res.data && res.data.ok)) setSubmissions(previous);
     } catch (e) { setSubmissions(previous); }
@@ -7863,7 +7884,7 @@ function App() {
     setSubmissions(submissions.filter(function (s) { return s.id !== id; }));
     try {
       var pin = await requireManagerPin();
-      var res = await sb.rpc("admin_delete_submission", { p_manager_pin: pin, p_submission_id: id });
+      var res = await sb.rpc("admin_delete_submission", { p_actor_id: myIdentity.id, p_pin: pin, p_submission_id: id });
       if (res.error || !(res.data && res.data.ok)) setSubmissions(previous);
     } catch (e) { setSubmissions(previous); }
   };
@@ -7955,31 +7976,28 @@ function App() {
     setTargets(draft);
     try {
       var pin = await requireManagerPin();
-      var res = await sb.rpc("admin_save_targets", { p_manager_pin: pin, p_targets: draft });
+      var res = await sb.rpc("admin_save_targets", { p_actor_id: myIdentity.id, p_pin: pin, p_targets: draft });
       if (res.error || !(res.data && res.data.ok)) setTargets(previous);
     } catch (e) { setTargets(previous); }
   };
  
+  // Patch 11. Two conditions, both about a specific person: the PIN
+  // verifies against THIS advisor's bcrypt hash (with verify_advisor_pin's
+  // five-attempt lockout carried over), and this advisor is flagged as a
+  // manager. There is no path here that creates access — the previous
+  // version handed manager rights to whoever typed a PIN first.
   var unlockManager = async function (pin) {
-    if (!hasManagerPin) {
-      var setRes = await sb.rpc("set_manager_pin_if_unset", { p_pin: pin });
-      if (!setRes.data) return false;
-      setHasManagerPin(true);
-      setIsManager(true); lset("is-manager", true);
-      setManagerPin(pin);
-      setShowManagerGate(false); setView("manager");
-      if (pinRequestRef.current) { pinRequestRef.current.resolve(pin); pinRequestRef.current = null; }
-      return true;
+    if (!myIdentity) return { ok: false, message: "Sign in first." };
+    var res = await sb.rpc("verify_manager", { p_actor_id: myIdentity.id, p_pin: pin });
+    if (res.error || !(res.data && res.data.ok)) {
+      return { ok: false, message: managerGateMessage(res.data && res.data.error, res.data) };
     }
-    var checkRes = await sb.rpc("check_manager_pin", { p_candidate: pin });
-    if (checkRes.data) {
-      setIsManager(true); lset("is-manager", true);
-      setManagerPin(pin);
-      setShowManagerGate(false); setView("manager");
-      if (pinRequestRef.current) { pinRequestRef.current.resolve(pin); pinRequestRef.current = null; }
-      return true;
-    }
-    return false;
+    setIsManager(true); lset("is-manager", true);
+    setAmFlaggedManager(true);
+    setManagerPin(pin);
+    setShowManagerGate(false); setView("manager");
+    if (pinRequestRef.current) { pinRequestRef.current.resolve(pin); pinRequestRef.current = null; }
+    return { ok: true };
   };
  
   // Every manager-only write goes through this first. If the PIN is
@@ -8531,7 +8549,7 @@ function App() {
       onPickCandidate: function (name) { navigate({ view: "manager", sheet: null, q: name }, true); }
     }),
  
-    showManagerGate && h(ManagerGate, { hasPin: hasManagerPin, onSubmit: unlockManager, onClose: cancelManagerGate })
+    showManagerGate && h(ManagerGate, { flagged: amFlaggedManager, onSubmit: unlockManager, onClose: cancelManagerGate })
   );
 }
  
