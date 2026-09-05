@@ -281,6 +281,78 @@ function isFullFunnel(e) {
   return !!e && (e.prospecting || 0) >= 1 && (e.approaching || 0) >= 1 && !!e.social;
 }
  
+// ---- Patch 13: weekly recap maths ---------------------------------------
+// Pure functions over the same myEntries map the consistency grid already
+// reads. No new table, no new RPC, and no second definition of "a week":
+// the boundary is startOfWeek()'s Monday, which is the same Monday the
+// leaderboard resets on, so "last week" here and "last week" on the board
+// are the same seven days.
+function shiftDate(dateStr, days) {
+  var d = new Date(dateStr + "T00:00:00");
+  d.setDate(d.getDate() + days);
+  return localDateStr(d);
+}
+
+function longWeekday(dateStr) {
+  return new Date(dateStr + "T00:00:00").toLocaleDateString("en-US", { weekday: "long" });
+}
+
+// The seven days ending the day before the current week started.
+function lastWeekRange(dateStr) {
+  var thisWeek = startOfWeek(dateStr);
+  return { start: shiftDate(thisWeek, -7), end: shiftDate(thisWeek, -1) };
+}
+
+// Dates are sorted before scanning so a tie for the best day resolves to
+// the earlier one, not to whatever order the rows came back from Supabase
+// in. `days` counts entry rows that exist, matching how the consistency
+// grid counts a logged day.
+function rangeTotals(entriesMap, start, end) {
+  var totals = {};
+  METRICS.forEach(function (m) { totals[m.key] = 0; });
+  var days = 0, best = null;
+  Object.keys(entriesMap || {}).sort().forEach(function (d) {
+    if (d < start || d > end) return;
+    var e = entriesMap[d];
+    if (!e) return;
+    days++;
+    METRICS.forEach(function (m) { totals[m.key] += (e[m.key] || 0); });
+    var t = entryTotal(e);
+    if (t > 0 && (!best || t > best.total)) best = { date: d, total: t };
+  });
+  var grand = METRICS.reduce(function (s, m) { return s + totals[m.key]; }, 0);
+  return { totals: totals, days: days, best: best, grand: grand };
+}
+
+// Returns null when the week has no logged activity at all, and the card
+// renders nothing in that case. A recap reading "0 appointments, 0 closed"
+// is a report card with a zero on it handed over the moment the app opens,
+// which is the same reason rank was kept out of the daily digest.
+//
+// Only metrics that actually moved get a line, for the same reason, and
+// the week-on-week line is produced ONLY when the number went up. To show
+// declines too, change `gain > 0` below to `gain !== 0` and give the card a
+// negative case.
+function weeklyRecapFrom(entriesMap, dateStr) {
+  var range = lastWeekRange(dateStr);
+  var wk = rangeTotals(entriesMap, range.start, range.end);
+  if (wk.grand === 0) return null;
+  var prev = rangeTotals(entriesMap, shiftDate(range.start, -7), shiftDate(range.start, -1));
+  var gain = wk.grand - prev.grand;
+  return {
+    start: range.start,
+    end: range.end,
+    days: wk.days,
+    grand: wk.grand,
+    lines: METRICS.filter(function (m) { return wk.totals[m.key] > 0; }).map(function (m) {
+      return { key: m.key, label: m.label, n: wk.totals[m.key] };
+    }),
+    bestDay: wk.best ? longWeekday(wk.best.date) : null,
+    bestDayTotal: wk.best ? wk.best.total : 0,
+    gain: (prev.grand > 0 && gain > 0) ? gain : 0
+  };
+}
+ 
 // ---- Patch 9: consistency math, lifted out of ManagerView ---------------
 // These three were closures inside ManagerView. The advisor now sees the
 // same 30-day grid for themselves, and a second copy of "how consistent is
@@ -4496,7 +4568,7 @@ function isOneSignalConfigured() {
 }
  
 var APP_NAME = "Unit App";
-var APP_VERSION = "5.8.0-patch12";
+var APP_VERSION = "5.9.0-patch13";
  
 function isSupabaseConfigured() {
   return SUPABASE_URL.indexOf("YOUR-PROJECT") === -1 && SUPABASE_ANON_KEY.indexOf("YOUR-ANON") === -1;
@@ -6046,6 +6118,45 @@ function CloseBtn(props) {
   }, "✕");
 }
  
+// ---- Patch 13: the weekly recap -----------------------------------------
+// Sits above the daily digest, on the same screen, on the first open of
+// each week only. Everything on it is this advisor's own history measured
+// against their own history: no rank, no unit average, nobody else's
+// numbers. That is the whole point of it for the bottom half of a
+// five-person board, who get nothing from a leaderboard.
+function RecapCard(props) {
+  var r = props.recap && props.recap.data;
+  if (!props.recap || !props.recap.open || !r) return null;
+
+  return h("div", {
+    style: { background: "rgba(242,183,5,0.10)", borderColor: C.gold },
+    className: "rounded-2xl border p-4 mb-6"
+  },
+    h("div", { style: { color: C.gold }, className: "text-[11px] uppercase tracking-wide font-mono mb-0.5" },
+      "Your week"),
+    h("div", { style: { color: C.muted }, className: "text-[11px] font-mono mb-3" },
+      shortDate(r.start) + " \u2013 " + shortDate(r.end)),
+    h("div", { className: "space-y-1.5 mb-3" },
+      r.lines.map(function (l) {
+        return h("div", { key: l.key, className: "flex items-baseline justify-between gap-3" },
+          h("div", { style: { color: C.text }, className: "text-sm truncate" }, l.label),
+          h("div", { style: { color: C.gold }, className: "font-mono text-sm font-semibold shrink-0" }, String(l.n))
+        );
+      })
+    ),
+    h("div", { style: { color: C.text }, className: "text-sm leading-relaxed mb-3" },
+      "Logged on " + r.days + (r.days === 1 ? " day" : " days") + "." +
+      (r.bestDay ? " Your best day was " + r.bestDay + "." : "") +
+      (r.gain > 0 ? " That is " + r.gain + " more than the week before." : "")),
+    h("button", {
+      type: "button",
+      onClick: props.recap.onDismiss,
+      style: { borderColor: C.gold, color: C.gold },
+      className: "w-full py-2 rounded-xl border text-sm font-semibold active:scale-[0.98] transition-transform"
+    }, "Got it")
+  );
+}
+
 // ---- Patch 9: "since your last visit" -----------------------------------
 // Lives on the Chats screen because that is where the app opens. A digest
 // on a tab the advisor has to navigate to is not a digest.
@@ -6119,6 +6230,8 @@ function HomeScreen(props) {
   // would render a second shield and a second "Battle River Unit" right
   // underneath the first one.
   return h("div", { className: "max-w-md mx-auto px-5 pt-5 pb-16" },
+ 
+    h(RecapCard, { recap: props.recap }),
  
     h(DigestCard, { digest: props.digest }),
  
@@ -8070,7 +8183,8 @@ function ScriptSection(props) {
         onOpenNames: props.onOpenNames,
         onQuickAdd: openQuickAdd,
         onAddAdvisor: props.onAddAdvisor,
-        digest: props.digest
+        digest: props.digest,
+        recap: props.recap
       }),
       overlays
     );
@@ -8930,6 +9044,33 @@ function App() {
     ackReferralUpdates();
   }
 
+  // ---- Patch 13: weekly recap, first open of each week -------------------
+  // The daily digest's rule one size up. The key holds the Monday of the
+  // week it was last shown in, so four reloads on Monday show it once and
+  // Tuesday's first open does not show it again.
+  //
+  // It is never marked seen while it has nothing to show, so an advisor who
+  // opens the app before their entries have arrived still gets it when they
+  // do, and a suppressed empty week does not silently burn the week's one
+  // showing.
+  var recapSeenKey = myCode ? "br-recap-seen-" + myCode : null;
+  var recapOpenState = useState(false); var recapOpen = recapOpenState[0], setRecapOpen = recapOpenState[1];
+  useEffect(function () {
+    if (!recapSeenKey) { setRecapOpen(false); return; }
+    setRecapOpen(lget(recapSeenKey, null) !== weekStart);
+  }, [recapSeenKey, weekStart]);
+
+  function dismissRecap() {
+    if (recapSeenKey) lset(recapSeenKey, weekStart);
+    setRecapOpen(false);
+  }
+
+  // No new read: the boot effect above already awaits refreshMyEntries()
+  // for the signed-in advisor before it clears `loading`, on every tab
+  // including this one. The 20s poll is what's advisor-tab-only, and a
+  // recap of a week that ended on Sunday has nothing to gain from a poll.
+  var weeklyRecap = recapOpen ? weeklyRecapFrom(myEntries, today) : null;
+
   // ---- Patch 9: referrals on the screen the app actually opens on --------
   // loadTeamData only runs when dataScope is "team", and Chats is not an
   // advisor tab, so on the landing screen `referrals` was empty — a
@@ -9189,6 +9330,9 @@ function App() {
           digest: {
             open: digestOpen, referralUpdates: referralUpdates,
             overdueCount: overdueCount, onDismiss: dismissDigest
+          },
+          recap: {
+            open: recapOpen, data: weeklyRecap, onDismiss: dismissRecap
           },
           onBack: goBackOne,
           onOpenQuickAdd: function () { navigate({ sheet: "quickadd" }, true); },
