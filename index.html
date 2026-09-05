@@ -1677,6 +1677,527 @@ function ManagerGate(props) {
   );
 }
  
+// ======================================================================
+// SCRIPT EDITOR (manager only)
+//
+// Edits a draft. Advisors only ever load the published doc, so nothing
+// typed here reaches a phone until Publish is tapped and the validator
+// has passed on both sides.
+// ======================================================================
+function ScriptEditorView(props) {
+  var loadState = useState(true); var loading = loadState[0], setLoading = loadState[1];
+  var errState = useState(""); var loadErr = errState[0], setLoadErr = errState[1];
+  var draftState = useState(emptyScriptDoc()); var draft = draftState[0], setDraft = draftState[1];
+  var pubState = useState(emptyScriptDoc()); var published = pubState[0], setPublished = pubState[1];
+  var verState = useState(0); var pubVersion = verState[0], setPubVersion = verState[1];
+  var trackState = useState(SCRIPT_PAYOUT); var track = trackState[0], setTrack = trackState[1];
+  var openState = useState(null); var openKey = openState[0], setOpenKey = openState[1];
+  var busyState = useState(""); var busy = busyState[0], setBusy = busyState[1];
+  var msgState = useState(null); var msg = msgState[0], setMsg = msgState[1];
+  var addState = useState(false); var adding = addState[0], setAdding = addState[1];
+  var newKeyState = useState(""); var newKey = newKeyState[0], setNewKey = newKeyState[1];
+  var newTitleState = useState(""); var newTitle = newTitleState[0], setNewTitle = newTitleState[1];
+  var histState = useState(null); var history = histState[0], setHistory = histState[1];
+  var confirmState = useState(null); var confirmDelete = confirmState[0], setConfirmDelete = confirmState[1];
+
+  var steps = resolveSteps(draft);
+  var check = validateScriptDoc(draft);
+  var dirty = !scriptDocsEqual(draft, published);
+
+  useEffect(function () {
+    var cancelled = false;
+    (async function () {
+      try {
+        var pin = await props.requirePin();
+        var res = await sb.rpc("admin_get_script_draft", { p_actor_id: props.actorId, p_pin: pin });
+        if (cancelled) return;
+        if (res.error || !(res.data && res.data.ok)) {
+          setLoadErr(managerGateMessage(res.data && res.data.error, res.data));
+          setLoading(false);
+          return;
+        }
+        setDraft(res.data.draft || emptyScriptDoc());
+        setPublished(res.data.published || emptyScriptDoc());
+        setPubVersion(res.data.published_version || 0);
+        setLoading(false);
+      } catch (e) {
+        if (!cancelled) { setLoadErr("Manager PIN required."); setLoading(false); }
+      }
+    })();
+    return function () { cancelled = true; };
+    // eslint-disable-next-line
+  }, []);
+
+  function flashMsg(text, ok) {
+    setMsg({ text: text, ok: ok !== false });
+    setTimeout(function () { setMsg(null); }, 3200);
+  }
+
+  // Every mutation below rewrites the whole doc rather than editing in
+  // place, so React sees a new object and the validator re-runs against
+  // exactly what would be published.
+  function withPatch(key, field, value) {
+    var next = JSON.parse(JSON.stringify(draft));
+    if (isBuiltInStep(key)) {
+      next.patches = next.patches || {};
+      next.patches[key] = next.patches[key] || {};
+      next.patches[key][field] = value;
+    } else {
+      next.custom = next.custom || {};
+      next.custom[key] = next.custom[key] || {};
+      next.custom[key][field] = value;
+    }
+    setDraft(next);
+  }
+
+  function resetStep(key) {
+    var next = JSON.parse(JSON.stringify(draft));
+    if (next.patches) delete next.patches[key];
+    setDraft(next);
+    flashMsg("Reset to the shipped wording. Publish to make it live.");
+  }
+
+  async function deleteCustom(key) {
+    var next = JSON.parse(JSON.stringify(draft));
+    if (next.custom) delete next.custom[key];
+    // Anything still pointing at the deleted step would fail validation, so
+    // those choices are pulled out here rather than left as an error the
+    // manager has to hunt down one by one.
+    ["patches", "custom"].forEach(function (bucket) {
+      Object.keys(next[bucket] || {}).forEach(function (k) {
+        var ch = next[bucket][k].choices;
+        if (!ch) return;
+        next[bucket][k].choices = ch.filter(function (c) { return c.next !== key; });
+      });
+    });
+    Object.keys(BASE_STEPS).forEach(function (k) {
+      var live = steps[k];
+      if (!live.choices.some(function (c) { return c.next === key; })) return;
+      next.patches = next.patches || {};
+      next.patches[k] = next.patches[k] || {};
+      next.patches[k].choices = live.choices.filter(function (c) { return c.next !== key; });
+    });
+    setDraft(next);
+    setOpenKey(null);
+    setConfirmDelete(null);
+    flashMsg("Deleted from the draft. Publish to make it live.");
+  }
+
+  // Deleting a step that advisors are standing on resets those
+  // conversations to the opener, so the count is shown before, not after.
+  async function askDeleteCustom(key) {
+    var live = 0;
+    try {
+      var res = await sb.from("conversation_backups").select("convo_id").eq("current_step", key).is("deleted_at", null);
+      live = (res.data || []).length;
+    } catch (e) { live = -1; }
+    setConfirmDelete({ key: key, live: live });
+  }
+
+  function addStep() {
+    var slug = newKey.trim().toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "");
+    if (!slug) { flashMsg("Give the step a short name.", false); return; }
+    var key = (track === SCRIPT_HEALTH ? "h_c_" : "c_") + slug;
+    if (steps[key]) { flashMsg("A step called " + key + " already exists.", false); return; }
+    var next = JSON.parse(JSON.stringify(draft));
+    next.custom = next.custom || {};
+    next.custom[key] = {
+      stage: "prospect",
+      title: newTitle.trim() || slug.replace(/_/g, " "),
+      note: "",
+      scripts: [],
+      choices: [{ label: "Back to the opener", next: scriptStartStep(track) }],
+      terminal: false
+    };
+    setDraft(next);
+    setNewKey(""); setNewTitle(""); setAdding(false);
+    setOpenKey(key);
+  }
+
+  async function saveDraft() {
+    setBusy("save");
+    try {
+      var pin = await props.requirePin();
+      var res = await sb.rpc("admin_save_script_draft", { p_actor_id: props.actorId, p_pin: pin, p_doc: draft });
+      if (res.error || !(res.data && res.data.ok)) flashMsg(managerGateMessage(res.data && res.data.error, res.data), false);
+      else flashMsg("Draft saved. Advisors still see the published version.");
+    } catch (e) { flashMsg("Couldn\u2019t save the draft.", false); }
+    setBusy("");
+  }
+
+  async function publish() {
+    if (!check.ok) { flashMsg("Fix the errors first.", false); return; }
+    setBusy("publish");
+    try {
+      var pin = await props.requirePin();
+      var res = await sb.rpc("admin_publish_script", { p_actor_id: props.actorId, p_pin: pin, p_doc: draft, p_note: null });
+      if (res.error || !(res.data && res.data.ok)) {
+        var serverErrors = res.data && res.data.errors;
+        if (serverErrors && serverErrors.length) flashMsg(serverErrors[0], false);
+        else flashMsg(managerGateMessage(res.data && res.data.error, res.data), false);
+      } else {
+        setPublished(JSON.parse(JSON.stringify(draft)));
+        setPubVersion(res.data.version || 0);
+        applyScriptDoc(draft, res.data.version || 0);
+        lset(SCRIPT_DOC_KEY, { doc: draft, version: res.data.version || 0 });
+        if (props.onPublished) props.onPublished();
+        flashMsg("Published as v" + (res.data.version || 0) + ". Advisors get it next time they open the app.");
+      }
+    } catch (e) { flashMsg("Couldn\u2019t publish.", false); }
+    setBusy("");
+  }
+
+  async function discard() {
+    setBusy("discard");
+    try {
+      var pin = await props.requirePin();
+      var res = await sb.rpc("admin_discard_script_draft", { p_actor_id: props.actorId, p_pin: pin });
+      if (res.error || !(res.data && res.data.ok)) flashMsg(managerGateMessage(res.data && res.data.error, res.data), false);
+      else { setDraft(res.data.draft || emptyScriptDoc()); setOpenKey(null); flashMsg("Draft reset to the published version."); }
+    } catch (e) { flashMsg("Couldn\u2019t discard.", false); }
+    setBusy("");
+  }
+
+  async function loadHistory() {
+    if (history) { setHistory(null); return; }
+    var res = await sb.from("script_doc_versions").select("version,published_at,note").order("version", { ascending: false }).limit(20);
+    setHistory(res.data || []);
+  }
+
+  async function restoreVersion(v) {
+    setBusy("restore");
+    try {
+      var pin = await props.requirePin();
+      var res = await sb.rpc("admin_restore_script_version", { p_actor_id: props.actorId, p_pin: pin, p_version: v });
+      if (res.error || !(res.data && res.data.ok)) flashMsg(managerGateMessage(res.data && res.data.error, res.data), false);
+      else { setDraft(res.data.draft || emptyScriptDoc()); setOpenKey(null); flashMsg("v" + v + " loaded into the draft. Review it, then publish."); }
+    } catch (e) { flashMsg("Couldn\u2019t restore.", false); }
+    setBusy("");
+  }
+
+  // ---- rendering ----------------------------------------------------
+
+  var trackKeys = Object.keys(steps).filter(function (k) { return scriptOf(k) === track; });
+
+  function label(text) {
+    return h("div", { style: { color: COLORS.slate }, className: "text-[10px] font-mono uppercase tracking-widest mb-1.5" }, text);
+  }
+
+  function textInput(value, onChange, placeholder, rows) {
+    var common = {
+      value: value == null ? "" : value,
+      onChange: function (ev) { onChange(ev.target.value); },
+      placeholder: placeholder || "",
+      style: { borderColor: COLORS.line, background: COLORS.parchment, color: COLORS.ink },
+      className: "w-full px-3 py-2 rounded-xl border outline-none text-[13px] leading-relaxed"
+    };
+    if (rows) { common.rows = rows; common.className += " resize-none"; return h("textarea", common); }
+    return h("input", common);
+  }
+
+  function stepEditor(key) {
+    var st = steps[key];
+    var isCustom = !!st.custom;
+    var patched = !!(draft.patches && draft.patches[key]);
+    var targets = trackKeys.slice().sort();
+
+    return h("div", { style: { borderColor: COLORS.line, background: COLORS.parchment }, className: "border-t px-4 py-4 space-y-4" },
+
+      h("div", null,
+        label("Title"),
+        textInput(st.title, function (v) { withPatch(key, "title", v); })
+      ),
+
+      h("div", null,
+        label("Stage"),
+        h("select", {
+          value: st.stage,
+          onChange: function (ev) { withPatch(key, "stage", ev.target.value); },
+          style: { borderColor: COLORS.line, background: COLORS.parchment, color: COLORS.ink },
+          className: "w-full px-3 py-2 rounded-xl border outline-none text-[13px]"
+        }, SCRIPT_STAGES_ALLOWED.map(function (s) {
+          return h("option", { key: s, value: s }, (STAGES[s] && STAGES[s].label) || s);
+        }))
+      ),
+
+      h("div", null,
+        label("Coaching note (shown above the lines, not sent)"),
+        textInput(st.note, function (v) { withPatch(key, "note", v); }, "Optional", 3)
+      ),
+
+      h("div", null,
+        label("Lines to copy \u2014 {name} fills in the client\u2019s name"),
+        h("div", { className: "space-y-2" },
+          (st.scripts || []).map(function (s, i) {
+            return h("div", { key: i, className: "flex gap-2 items-start" },
+              h("div", { className: "flex-1" }, textInput(s, function (v) {
+                var arr = (st.scripts || []).slice(); arr[i] = v; withPatch(key, "scripts", arr);
+              }, "", 4)),
+              h("button", {
+                onClick: function () {
+                  var arr = (st.scripts || []).slice(); arr.splice(i, 1); withPatch(key, "scripts", arr);
+                },
+                style: { color: COLORS.rust }, className: "px-2 py-2 text-lg", "aria-label": "Remove this line"
+              }, "\u00d7")
+            );
+          }),
+          h("button", {
+            onClick: function () { withPatch(key, "scripts", (st.scripts || []).concat([""])); },
+            style: { color: COLORS.brass, borderColor: COLORS.line },
+            className: "w-full py-2 rounded-xl border text-xs font-mono"
+          }, "+ add a line")
+        )
+      ),
+
+      h("div", null,
+        label("What the client said next"),
+        h("div", { className: "space-y-2" },
+          (st.choices || []).map(function (ch, i) {
+            return h("div", { key: i, style: { borderColor: COLORS.line }, className: "border rounded-xl p-2 space-y-1.5" },
+              h("div", { className: "flex gap-2 items-center" },
+                h("div", { className: "flex-1" }, textInput(ch.label, function (v) {
+                  var arr = (st.choices || []).map(function (c, j) { return j === i ? { label: v, next: c.next } : c; });
+                  withPatch(key, "choices", arr);
+                }, "What the advisor taps")),
+                h("button", {
+                  onClick: function () {
+                    var arr = (st.choices || []).slice(); arr.splice(i, 1); withPatch(key, "choices", arr);
+                  },
+                  style: { color: COLORS.rust }, className: "px-2 text-lg", "aria-label": "Remove this choice"
+                }, "\u00d7")
+              ),
+              h("select", {
+                value: ch.next,
+                onChange: function (ev) {
+                  var arr = (st.choices || []).map(function (c, j) { return j === i ? { label: c.label, next: ev.target.value } : c; });
+                  withPatch(key, "choices", arr);
+                },
+                style: { borderColor: COLORS.line, background: COLORS.card, color: COLORS.ink },
+                className: "w-full px-3 py-2 rounded-xl border outline-none text-[12px]"
+              },
+                h("option", { value: "home" }, "\u2190 Park it (back to the chat list)"),
+                targets.map(function (t) {
+                  return h("option", { key: t, value: t }, steps[t].title + "  \u00b7  " + t);
+                })
+              )
+            );
+          }),
+          h("button", {
+            onClick: function () {
+              withPatch(key, "choices", (st.choices || []).concat([{ label: "Next", next: scriptStartStep(track) }]));
+            },
+            style: { color: COLORS.brass, borderColor: COLORS.line },
+            className: "w-full py-2 rounded-xl border text-xs font-mono"
+          }, "+ add a choice")
+        )
+      ),
+
+      isCustom && h("button", {
+        onClick: function () { withPatch(key, "terminal", !st.terminal); },
+        style: { borderColor: st.terminal ? COLORS.brass : COLORS.line, color: COLORS.ink },
+        className: "w-full py-2.5 rounded-xl border text-[12px] text-left px-3"
+      }, (st.terminal ? "\u2713 " : "\u2007\u2007") + "This step ends the conversation"),
+
+      h("div", { className: "flex gap-2 pt-1" },
+        patched && h("button", {
+          onClick: function () { resetStep(key); },
+          style: { borderColor: COLORS.line, color: COLORS.slate },
+          className: "flex-1 py-2.5 rounded-xl border text-xs font-mono"
+        }, "reset to shipped wording"),
+        isCustom && h("button", {
+          onClick: function () { askDeleteCustom(key); },
+          style: { borderColor: COLORS.rust, color: COLORS.rust },
+          className: "flex-1 py-2.5 rounded-xl border text-xs font-mono"
+        }, "delete this step")
+      )
+    );
+  }
+
+  if (loading) {
+    return h("div", { className: "px-5 mt-6" },
+      h("div", { style: { color: COLORS.slate }, className: "text-sm text-center py-16" }, "Loading the script\u2026"));
+  }
+
+  if (loadErr) {
+    return h("div", { className: "px-5 mt-6" },
+      h("div", { style: { background: COLORS.card, borderColor: COLORS.rust, color: COLORS.rust }, className: "rounded-2xl border p-4 text-sm" }, loadErr));
+  }
+
+  return h("div", { className: "px-5 mt-6 space-y-5 pb-10" },
+
+    h("div", null,
+      h("div", { style: { color: COLORS.ink }, className: "font-display text-2xl" }, "Chat script"),
+      h("div", { style: { color: COLORS.slate }, className: "text-[12px] mt-1 leading-relaxed" },
+        "Published v" + pubVersion + ". " + (dirty ? "The draft has changes advisors can\u2019t see yet." : "The draft matches what\u2019s live."))
+    ),
+
+    h("div", { className: "flex gap-2" },
+      SCRIPT_ORDER.map(function (t) {
+        var on = track === t;
+        return h("button", {
+          key: t,
+          onClick: function () { setTrack(t); setOpenKey(null); setAdding(false); },
+          style: {
+            background: on ? COLORS.brass : "transparent",
+            color: on ? COLORS.parchment : COLORS.slate,
+            borderColor: on ? COLORS.brass : COLORS.line
+          },
+          className: "flex-1 px-3 py-2 rounded-xl border text-[13px] font-semibold"
+        }, SCRIPT_META[t].label);
+      })
+    ),
+
+    msg && h("div", {
+      style: {
+        background: COLORS.card,
+        borderColor: msg.ok ? COLORS.brass : COLORS.rust,
+        color: msg.ok ? COLORS.ink : COLORS.rust
+      },
+      className: "rounded-2xl border p-3 text-[12px] leading-relaxed"
+    }, msg.text),
+
+    (check.errors.length > 0 || check.warnings.length > 0) && h("div", {
+      style: { background: COLORS.card, borderColor: check.errors.length ? COLORS.rust : COLORS.line },
+      className: "rounded-2xl border p-3.5"
+    },
+      check.errors.length > 0 && h("div", { className: "mb-2" },
+        h("div", { style: { color: COLORS.rust }, className: "text-[10px] font-mono uppercase tracking-widest mb-1.5" },
+          check.errors.length + (check.errors.length === 1 ? " problem \u2014 can\u2019t publish" : " problems \u2014 can\u2019t publish")),
+        h("ul", { className: "space-y-1" }, check.errors.map(function (e, i) {
+          return h("li", { key: i, style: { color: COLORS.ink }, className: "text-[12px] leading-relaxed" }, "\u2022 " + e);
+        }))
+      ),
+      check.warnings.length > 0 && h("div", null,
+        h("div", { style: { color: COLORS.slate }, className: "text-[10px] font-mono uppercase tracking-widest mb-1.5" }, "Worth a look"),
+        h("ul", { className: "space-y-1" }, check.warnings.map(function (w, i) {
+          return h("li", { key: i, style: { color: COLORS.slate }, className: "text-[12px] leading-relaxed" }, "\u2022 " + w);
+        }))
+      )
+    ),
+
+    confirmDelete && h("div", {
+      style: { background: COLORS.card, borderColor: COLORS.rust },
+      className: "rounded-2xl border p-3.5"
+    },
+      h("div", { style: { color: COLORS.ink }, className: "text-[13px] leading-relaxed mb-3" },
+        "Delete \u201C" + (steps[confirmDelete.key] ? steps[confirmDelete.key].title : confirmDelete.key) + "\u201D? " +
+        (confirmDelete.live > 0
+          ? confirmDelete.live + " conversation" + (confirmDelete.live === 1 ? " is" : "s are") + " sitting on this step right now and would be sent back to the opener."
+          : confirmDelete.live === 0
+            ? "No conversations are on this step."
+            : "Couldn\u2019t check how many conversations are on this step.") +
+        " Any choice pointing at it will be removed too."),
+      h("div", { className: "flex gap-2" },
+        h("button", {
+          onClick: function () { deleteCustom(confirmDelete.key); },
+          style: { background: COLORS.rust, color: COLORS.parchment },
+          className: "flex-1 py-2.5 rounded-xl text-sm font-bold"
+        }, "Delete"),
+        h("button", {
+          onClick: function () { setConfirmDelete(null); },
+          style: { color: COLORS.slate }, className: "px-4 py-2.5 text-sm font-mono"
+        }, "Cancel")
+      )
+    ),
+
+    h("div", { style: { background: COLORS.card, borderColor: COLORS.line }, className: "rounded-2xl border divide-y overflow-hidden" },
+      trackKeys.map(function (key) {
+        var st = steps[key];
+        var open = openKey === key;
+        var patched = !!(draft.patches && draft.patches[key]);
+        return h("div", { key: key },
+          h("button", {
+            onClick: function () { setOpenKey(open ? null : key); },
+            className: "w-full px-4 py-3 text-left flex items-center gap-2"
+          },
+            h("span", { style: { background: (STAGES[st.stage] || {}).color || COLORS.slate, width: "7px", height: "7px", borderRadius: "50%", flexShrink: 0, display: "inline-block" } }),
+            h("div", { className: "flex-1 min-w-0" },
+              h("div", { style: { color: COLORS.ink }, className: "text-sm font-medium truncate" }, st.title),
+              h("div", { style: { color: COLORS.slate }, className: "text-[10px] font-mono truncate" }, key)
+            ),
+            st.custom && h("span", { style: { color: COLORS.brass, borderColor: COLORS.brass }, className: "text-[9px] font-mono uppercase border rounded px-1.5 py-0.5 shrink-0" }, "new"),
+            !st.custom && patched && h("span", { style: { color: COLORS.slate, borderColor: COLORS.line }, className: "text-[9px] font-mono uppercase border rounded px-1.5 py-0.5 shrink-0" }, "edited"),
+            h("span", { style: { color: COLORS.slate }, className: "shrink-0" }, open ? "\u2303" : "\u203a")
+          ),
+          open && stepEditor(key)
+        );
+      })
+    ),
+
+    !adding && h("button", {
+      onClick: function () { setAdding(true); },
+      style: { borderColor: COLORS.line, color: COLORS.brass },
+      className: "w-full py-3 rounded-2xl border text-sm font-medium"
+    }, "+ Add a step to the " + SCRIPT_META[track].short + " script"),
+
+    adding && h("div", { style: { background: COLORS.card, borderColor: COLORS.line }, className: "rounded-2xl border p-4 space-y-3" },
+      h("div", { style: { color: COLORS.slate }, className: "text-[12px] leading-relaxed" },
+        "New steps are named " + (track === SCRIPT_HEALTH ? "h_c_" : "c_") + "something so they can never clash with the 42 built-in steps. You can delete one later; the built-ins are permanent."),
+      textInput(newTitle, setNewTitle, "Title, e.g. Handle the budget objection"),
+      textInput(newKey, setNewKey, "Short name, e.g. budget_objection"),
+      h("div", { className: "flex gap-2" },
+        h("button", {
+          onClick: addStep,
+          style: { background: COLORS.brass, color: COLORS.parchment },
+          className: "flex-1 py-2.5 rounded-xl text-sm font-bold"
+        }, "Add step"),
+        h("button", {
+          onClick: function () { setAdding(false); setNewKey(""); setNewTitle(""); },
+          style: { color: COLORS.slate }, className: "px-4 py-2.5 text-sm font-mono"
+        }, "Cancel")
+      )
+    ),
+
+    h("div", { className: "space-y-2 pt-2" },
+      h("button", {
+        onClick: publish,
+        disabled: !check.ok || !!busy,
+        style: {
+          background: check.ok ? COLORS.brass : COLORS.line,
+          color: COLORS.parchment, opacity: busy ? 0.6 : 1
+        },
+        className: "w-full py-3.5 rounded-2xl font-bold text-sm"
+      }, busy === "publish" ? "Publishing\u2026" : (dirty ? "Publish to the team" : "Publish again")),
+      h("div", { className: "flex gap-2" },
+        h("button", {
+          onClick: saveDraft, disabled: !!busy,
+          style: { borderColor: COLORS.line, color: COLORS.ink },
+          className: "flex-1 py-2.5 rounded-xl border text-xs font-mono"
+        }, busy === "save" ? "Saving\u2026" : "save draft"),
+        h("button", {
+          onClick: discard, disabled: !!busy || !dirty,
+          style: { borderColor: COLORS.line, color: dirty ? COLORS.slate : COLORS.line },
+          className: "flex-1 py-2.5 rounded-xl border text-xs font-mono"
+        }, "discard draft")
+      ),
+      h("button", {
+        onClick: loadHistory,
+        style: { color: COLORS.slate }, className: "w-full py-2 text-xs font-mono"
+      }, history ? "hide version history" : "version history")
+    ),
+
+    history && h("div", { style: { background: COLORS.card, borderColor: COLORS.line }, className: "rounded-2xl border divide-y overflow-hidden" },
+      history.length === 0 && h("div", { style: { color: COLORS.slate }, className: "px-4 py-4 text-[12px]" }, "Nothing published yet."),
+      history.map(function (v) {
+        return h("div", { key: v.version, className: "px-4 py-3 flex items-center gap-3" },
+          h("div", { className: "flex-1 min-w-0" },
+            h("div", { style: { color: COLORS.ink }, className: "text-sm font-medium" }, "v" + v.version),
+            h("div", { style: { color: COLORS.slate }, className: "text-[10px] font-mono" }, (v.published_at || "").slice(0, 16).replace("T", " "))
+          ),
+          h("button", {
+            onClick: function () { restoreVersion(v.version); },
+            style: { borderColor: COLORS.line, color: COLORS.ink },
+            className: "px-3 py-1.5 rounded-xl border text-[11px] font-mono shrink-0"
+          }, "load into draft")
+        );
+      })
+    ),
+
+    h("div", { style: { color: COLORS.slate }, className: "text-[11px] leading-relaxed pt-2" },
+      "The 42 built-in steps can be reworded and rewired but never renamed or removed, so Appointments Set and Clients Closed stay wired to the steps that log them. Advisors pick up a published change the next time they open the app.")
+  );
+}
+ 
 function TrendChart(props) {
   var data = props.data;
   var w = 320, ht = 160, pad = 24;
@@ -3000,6 +3521,12 @@ function ManagerView(props) {
         )
       )
     ),
+    h("button", {
+      onClick: function () { navigate({ view: "scriptedit", advisor: null, sheet: null }, true); },
+      style: { borderColor: COLORS.line, color: COLORS.ink },
+      className: "w-full py-3 rounded-2xl border font-medium text-sm mb-2"
+    }, "Edit the chat script"),
+ 
     h("button", { onClick: function () { navigate({ sheet: "export" }, true); }, style: { borderColor: COLORS.line, color: COLORS.ink }, className: "w-full py-3 rounded-2xl border font-medium text-sm" }, "Export last 60 days as CSV"),
  
     // ---- Overlays. All four are bottom sheets: ✕, Esc, a downward swipe
@@ -3876,7 +4403,7 @@ function SectionTitle(props) {
 // The hash form (#?view=...) is read as a fallback because some chat
 // clients strip query strings from shared links but keep the fragment.
 // ---------------------------------------------------------------------
-var VIEW_KEYS = ["chats", "names", "today", "team", "rewards", "more", "manager", "recruitment"];
+var VIEW_KEYS = ["chats", "names", "today", "team", "rewards", "more", "manager", "recruitment", "scriptedit"];
 var ROUTE_KEYS = ["view", "advisor", "sheet", "lane", "q", "convo", "prospect", "focus"];
  
 function parseRoute() {
@@ -3969,7 +4496,7 @@ function isOneSignalConfigured() {
 }
  
 var APP_NAME = "Unit App";
-var APP_VERSION = "5.7.0-patch11";
+var APP_VERSION = "5.8.0-patch12";
  
 function isSupabaseConfigured() {
   return SUPABASE_URL.indexOf("YOUR-PROJECT") === -1 && SUPABASE_ANON_KEY.indexOf("YOUR-ANON") === -1;
@@ -4028,7 +4555,7 @@ var STAGES = {
   closing: { label: "Client Closed", color: C.good }
 };
  
-var STEPS = {
+var BASE_STEPS = {
   start: {
     stage: "approach",
     title: "The opener",
@@ -4453,9 +4980,9 @@ var STEPS = {
   }
 };
  
-var FINISHED = { done: true, pass_sunlife: true, h_pass_sunlife: true, h_handoff: true };
+var BASE_FINISHED = { done: true, pass_sunlife: true, h_pass_sunlife: true, h_handoff: true };
  
-var STEP_PROGRESS = {
+var BASE_STEP_PROGRESS = {
   start: 0,
   seen_opener: 5,
   explain_payout: 15,
@@ -4597,6 +5124,223 @@ function switchTargetStep(stepKey) {
     return scriptStartStep(otherScript(scriptOf(stepKey)));
   }
   return target;
+}
+ 
+// ======================================================================
+// EDITABLE SCRIPT (Patch 12)
+//
+// BASE_STEPS above is what the code ships and is the only thing that
+// exists offline, on a cold first load, or if the database is unreachable.
+// A published doc is layered over it:
+//
+//   patches  per-step field overrides for the 42 built-in steps
+//   custom   whole new steps, keyed c_foo (payout) or h_c_foo (health)
+//
+// Two properties matter and are enforced here rather than trusted:
+// a patch can only override fields on a step that already exists, and a
+// custom step is refused if its key collides with a built-in. Together
+// those mean the 42 keys can never be renamed or removed by anything a
+// manager publishes — which is what keeps appt_confirm, h_appt_confirm and
+// done permanently present, since those three are wired to Appointments
+// Set and Clients Closed.
+//
+// STEPS / FINISHED / STEP_PROGRESS are reassigned, not rebuilt in place,
+// so every existing reader picks the new values up on the next render
+// without knowing this layer exists.
+// ======================================================================
+var SCRIPT_DOC_KEY = "br-script-doc";
+var CUSTOM_KEY_RE = /^(h_)?c_[a-z0-9_]+$/;
+ 
+function emptyScriptDoc() { return { v: 1, patches: {}, custom: {} }; }
+ 
+function isBuiltInStep(key) {
+  return Object.prototype.hasOwnProperty.call(BASE_STEPS, key);
+}
+ 
+function resolveSteps(sdoc) {
+  var steps = {};
+  Object.keys(BASE_STEPS).forEach(function (k) { steps[k] = BASE_STEPS[k]; });
+ 
+  var patches = (sdoc && sdoc.patches) || {};
+  Object.keys(patches).forEach(function (k) {
+    if (!steps[k]) return;                       // patches never create steps
+    var p = patches[k] || {}, base = steps[k];
+    steps[k] = {
+      stage:   p.stage   != null ? p.stage   : base.stage,
+      title:   p.title   != null ? p.title   : base.title,
+      note:    p.note    != null ? p.note    : base.note,
+      scripts: p.scripts != null ? p.scripts : base.scripts,
+      choices: p.choices != null ? p.choices : base.choices,
+      edited: true
+    };
+  });
+ 
+  var custom = (sdoc && sdoc.custom) || {};
+  Object.keys(custom).forEach(function (k) {
+    if (steps[k]) return;                        // never shadow a built-in
+    if (!CUSTOM_KEY_RE.test(k)) return;
+    var c = custom[k] || {};
+    steps[k] = {
+      stage: c.stage || "prospect",
+      title: c.title || k,
+      note: c.note || "",
+      scripts: c.scripts || [],
+      choices: c.choices || [],
+      custom: true,
+      terminal: !!c.terminal
+    };
+  });
+ 
+  return steps;
+}
+ 
+function resolveFinished(steps) {
+  var fin = {};
+  Object.keys(BASE_FINISHED).forEach(function (k) { fin[k] = BASE_FINISHED[k]; });
+  Object.keys(steps).forEach(function (k) {
+    if (steps[k].custom && steps[k].terminal) fin[k] = true;
+  });
+  return fin;
+}
+ 
+// A custom step has no shipped progress value. Rather than asking the
+// manager to invent a percentage, it inherits from whichever step points
+// at it — the furthest along, if several do. Repeated because a custom
+// step can point at another custom step.
+function resolveProgress(steps) {
+  var prog = {};
+  Object.keys(BASE_STEP_PROGRESS).forEach(function (k) { prog[k] = BASE_STEP_PROGRESS[k]; });
+  for (var pass = 0; pass < 4; pass++) {
+    Object.keys(steps).forEach(function (to) {
+      if (prog[to] != null) return;
+      var best = null;
+      Object.keys(steps).forEach(function (from) {
+        if (prog[from] == null) return;
+        (steps[from].choices || []).forEach(function (ch) {
+          if (ch.next === to && (best === null || prog[from] > best)) best = prog[from];
+        });
+      });
+      if (best !== null) prog[to] = best;
+    });
+  }
+  Object.keys(steps).forEach(function (k) { if (prog[k] == null) prog[k] = 0; });
+  return prog;
+}
+ 
+var STEPS = BASE_STEPS;
+var FINISHED = BASE_FINISHED;
+var STEP_PROGRESS = BASE_STEP_PROGRESS;
+var scriptDocVersion = 0;
+var scriptDocCurrent = emptyScriptDoc();
+ 
+function applyScriptDoc(sdoc, version) {
+  scriptDocCurrent = sdoc || emptyScriptDoc();
+  STEPS = resolveSteps(scriptDocCurrent);
+  FINISHED = resolveFinished(STEPS);
+  STEP_PROGRESS = resolveProgress(STEPS);
+  if (typeof version === "number") scriptDocVersion = version;
+}
+ 
+// Applied from cache before the first paint. An advisor opening the app on
+// the train sees the script they were published, not the one compiled into
+// the file they downloaded three weeks ago.
+(function () {
+  try {
+    var cached = lget(SCRIPT_DOC_KEY, null);
+    if (cached && cached.doc) applyScriptDoc(cached.doc, cached.version || 0);
+  } catch (e) { /* a corrupt cache must fall back to the built-ins, not crash */ }
+})();
+ 
+// ---- validation ------------------------------------------------------
+// Mirrors validate_script_doc() in the database and adds the checks that
+// need a graph walk. The database copy is the one that cannot be skipped;
+// this one exists so the manager sees every problem at once, on the screen
+// where they can fix it, before Publish is even tappable.
+var SCRIPT_STAGES_ALLOWED = ["approach", "relationship", "prospect", "appointment", "presented", "closing"];
+ 
+function validateScriptDoc(sdoc) {
+  var errors = [], warnings = [];
+  var steps = resolveSteps(sdoc);
+  var patches = (sdoc && sdoc.patches) || {};
+  var custom = (sdoc && sdoc.custom) || {};
+ 
+  Object.keys(patches).forEach(function (k) {
+    if (!isBuiltInStep(k)) errors.push('"' + k + '" is not a built-in step.');
+  });
+ 
+  Object.keys(custom).forEach(function (k) {
+    if (!CUSTOM_KEY_RE.test(k)) {
+      errors.push('"' + k + '" must be named c_something, or h_c_something on the health track.');
+    }
+    if (isBuiltInStep(k)) errors.push('"' + k + '" collides with a built-in step.');
+    var c = custom[k] || {};
+    if (!(c.title || "").trim()) errors.push('"' + k + '" needs a title.');
+    if (SCRIPT_STAGES_ALLOWED.indexOf(c.stage) === -1) errors.push('"' + k + '" has an unknown stage.');
+    if (!c.terminal && (c.choices || []).length === 0) {
+      errors.push('"' + (c.title || k) + '" has no choices, so an advisor would be stuck on it. Add a choice or mark it as an ending.');
+    }
+  });
+ 
+  Object.keys(steps).forEach(function (k) {
+    var st = steps[k];
+    var track = scriptOf(k);
+    (st.choices || []).forEach(function (ch) {
+      if (!(ch.label || "").trim()) errors.push('A choice on "' + st.title + '" has no label.');
+      if (!ch.next) { errors.push('A choice on "' + st.title + '" has no destination.'); return; }
+      if (ch.next === "home") return;
+      if (!steps[ch.next]) { errors.push('"' + st.title + '" points at "' + ch.next + '", which does not exist.'); return; }
+      if (scriptOf(ch.next) !== track) {
+        errors.push('"' + st.title + '" points at a step on the other script. Use the switch control instead \u2014 a conversation\u2019s track is read from its step.');
+      }
+    });
+    (st.scripts || []).forEach(function (s) {
+      (String(s).match(/\{[^}]*\}/g) || []).forEach(function (t) {
+        if (t !== "{name}") errors.push('"' + st.title + '" contains ' + t + '. The only placeholder that fills in is {name}.');
+      });
+    });
+  });
+ 
+  // Reachability, per track. An orphan is not fatal to anyone mid-flow, so
+  // it is a warning — but it means work that no advisor will ever see.
+  SCRIPT_ORDER.forEach(function (track) {
+    var seen = {}, stack = [scriptStartStep(track)];
+    while (stack.length) {
+      var k = stack.pop();
+      if (k === "home" || seen[k] || !steps[k]) continue;
+      seen[k] = true;
+      (steps[k].choices || []).forEach(function (ch) { stack.push(ch.next); });
+    }
+    Object.keys(steps).forEach(function (k) {
+      if (scriptOf(k) !== track || seen[k]) return;
+      warnings.push('"' + steps[k].title + '" can\u2019t be reached from the ' + scriptMeta(track).short + ' opener.');
+    });
+  });
+ 
+  // The two milestone steps must stay reachable or the metric silently
+  // stops moving, which is the failure nobody notices for a month.
+  [["appt_confirm", "Appointments Set"], ["h_appt_confirm", "Appointments Set (health)"], ["done", "Clients Closed"]]
+    .forEach(function (pair) {
+      var track = scriptOf(pair[0]);
+      var seen = {}, stack = [scriptStartStep(track)];
+      while (stack.length) {
+        var k = stack.pop();
+        if (k === "home" || seen[k] || !steps[k]) continue;
+        seen[k] = true;
+        (steps[k].choices || []).forEach(function (ch) { stack.push(ch.next); });
+      }
+      if (!seen[pair[0]]) errors.push('Nothing leads to "' + steps[pair[0]].title + '" any more, so ' + pair[1] + ' would stop being logged.');
+    });
+ 
+  return { ok: errors.length === 0, errors: errors, warnings: warnings };
+}
+ 
+function scriptDocIsEmpty(sdoc) {
+  return Object.keys((sdoc && sdoc.patches) || {}).length === 0
+      && Object.keys((sdoc && sdoc.custom) || {}).length === 0;
+}
+ 
+function scriptDocsEqual(a, b) {
+  try { return JSON.stringify(a) === JSON.stringify(b); } catch (e) { return false; }
 }
  
 function scriptProgress(stepKey) {
@@ -7359,6 +8103,9 @@ function App() {
   // "is the signed-in advisor flagged as a manager?", a question about a
   // person, which is the only kind the new gate is willing to answer.
   var flaggedState = useState(false); var amFlaggedManager = flaggedState[0], setAmFlaggedManager = flaggedState[1];
+  // STEPS is reassigned outside React when a published script arrives.
+  // Bumping this is what tells the tree to read it again.
+  var scriptTickState = useState(0); var scriptTick = scriptTickState[0], setScriptTick = scriptTickState[1];
   var isManagerState = useState(!!lget("is-manager")); var isManager = isManagerState[0], setIsManager = isManagerState[1];
   // The manager's PIN itself, kept ONLY in memory (never localStorage,
   // never persisted) — cleared on every page reload by design. Every
@@ -7452,10 +8199,19 @@ function App() {
     (async function () {
       var results = await Promise.all([
         sb.from("advisors").select("*").order("name"),
-        sb.from("targets").select("*")
+        sb.from("targets").select("*"),
+        // Patch 12. Failure here is deliberately not fatal: the built-in
+        // script is always available, so an unreachable doc means slightly
+        // stale wording, not a broken Chats tab.
+        sb.from("script_docs").select("doc,version").eq("status", "published").maybeSingle()
       ]);
       if (cancelled) return;
-      var rosterRes = results[0], targetRes = results[1];
+      var rosterRes = results[0], targetRes = results[1], scriptRes = results[2];
+      if (!scriptRes.error && scriptRes.data && scriptRes.data.doc) {
+        applyScriptDoc(scriptRes.data.doc, scriptRes.data.version || 0);
+        lset(SCRIPT_DOC_KEY, { doc: scriptRes.data.doc, version: scriptRes.data.version || 0 });
+        setScriptTick(function (n) { return n + 1; });
+      }
       if (rosterRes.error || targetRes.error) {
         setDbError("Couldn't reach the database. Check that your Supabase URL and key are filled in at the top of index.html, and that schema.sql has been run.");
         setLoading(false);
@@ -7563,7 +8319,7 @@ function App() {
  
   // Manager-only destinations fall back to Today (and raise the PIN gate)
   // rather than rendering an empty screen for someone without access.
-  var managerOnly = requestedView === "manager" || requestedView === "recruitment";
+  var managerOnly = requestedView === "manager" || requestedView === "recruitment" || requestedView === "scriptedit";
   var view = (managerOnly && !isManager) ? "today" : requestedView;
   var isAdvisorTab = view === "today" || view === "team" || view === "rewards";
   // The script half renders whenever one of its destinations is showing.
@@ -8338,7 +9094,7 @@ function App() {
       scrollToTop(true);
       return;
     }
-    if ((key === "manager" || key === "recruitment") && !isManager) { setShowManagerGate(true); return; }
+    if ((key === "manager" || key === "recruitment" || key === "scriptedit") && !isManager) { setShowManagerGate(true); return; }
     navigate({ view: key, advisor: null, sheet: null, convo: null, prospect: null, focus: null }, true);
   }
  
@@ -8500,6 +9256,11 @@ function App() {
         onAddManagerSubmission: function(advisorCode, serial, clientName, amount, nbAc, submittedDate, settledDate) {
           return addManagerSubmission(advisorCode, serial, clientName, amount, nbAc, submittedDate, settledDate);
         }
+      }),
+      view === "scriptedit" && isManager && h(ScriptEditorView, {
+        actorId: myIdentity && myIdentity.id,
+        requirePin: requireManagerPin,
+        onPublished: function () { setScriptTick(function (n) { return n + 1; }); }
       }),
       view === "recruitment" && isManager && h(RecruitmentView, {
         readOnly: true, today: today, scorecard: recruitment.scorecard, forumEvents: recruitment.forumEvents,
