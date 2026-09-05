@@ -281,6 +281,92 @@ function isFullFunnel(e) {
   return !!e && (e.prospecting || 0) >= 1 && (e.approaching || 0) >= 1 && !!e.social;
 }
  
+// ---- Patch 9: consistency math, lifted out of ManagerView ---------------
+// These three were closures inside ManagerView. The advisor now sees the
+// same 30-day grid for themselves, and a second copy of "how consistent is
+// this person" would drift apart the way the two Incentive Receivable
+// calculations once did. One definition, two callers.
+//
+// The manager passes a byDate map built from teamEntries; the advisor
+// passes myEntries, which is already keyed by entry_date. Same shape,
+// same arithmetic, same answer.
+
+// One cell per calendar day, oldest -> today. Weekends are flagged (not
+// excluded) so a missed Saturday can render differently from a missed
+// Tuesday, matching the Mon-Fri assumption already used by
+// currentStreakFrom/bestStreakFrom elsewhere in this file.
+function last30Days() {
+  var days = [];
+  for (var i = 29; i >= 0; i--) {
+    var d = new Date();
+    d.setDate(d.getDate() - i);
+    var dow = d.getDay();
+    days.push({ date: localDateStr(d), weekend: dow === 0 || dow === 6 });
+  }
+  return days;
+}
+
+function entriesByDate(rows, code) {
+  var byDate = {};
+  (rows || []).forEach(function (e) { if (e.advisor_code === code) byDate[e.entry_date] = e; });
+  return byDate;
+}
+
+// An advisor's first day ON THE SYSTEM. Days before this are not misses —
+// the tool didn't exist for them yet — so they must not be counted in the
+// denominator or drawn the same colour as a missed day.
+//
+// Takes the EARLIEST of (roster started_on, roster created_at, first entry)
+// deliberately. Using first-entry alone would let someone who joined three
+// weeks ago and logged once yesterday score 1/1 = perfect, which is a worse
+// lie than the fixed-22 denominator this replaces. created_at is parsed
+// through localDateStr so a UTC timestamp lands on the right Manila day.
+function advisorStartDateFrom(r, byDate) {
+  var candidates = [];
+  if (r && r.started_on) candidates.push(String(r.started_on).slice(0, 10));
+  if (r && r.created_at) {
+    var parsed = new Date(r.created_at);
+    if (!isNaN(parsed.getTime())) candidates.push(localDateStr(parsed));
+  }
+  var firstEntry = null;
+  Object.keys(byDate || {}).forEach(function (d) {
+    if (!firstEntry || d < firstEntry) firstEntry = d;
+  });
+  if (firstEntry) candidates.push(firstEntry);
+  if (candidates.length === 0) return null;
+  return candidates.sort()[0];
+}
+
+function consistencyStatsFrom(byDate, startStr, days) {
+  var loggedWeekdays = 0, eligibleWeekdays = 0;
+  var cells = days.map(function (day) {
+    var preTenure = !!startStr && day.date < startStr;
+    var e = byDate[day.date];
+    var lit = entryTotal(e) > 0;
+    var full = isFullFunnel(e);
+    if (!day.weekend && !preTenure) {
+      eligibleWeekdays++;
+      if (lit) loggedWeekdays++;
+    }
+    return { date: day.date, weekend: day.weekend, lit: lit, full: full, preTenure: preTenure };
+  });
+  return {
+    cells: cells,
+    loggedWeekdays: loggedWeekdays,
+    eligibleWeekdays: eligibleWeekdays,
+    startStr: startStr,
+    // "New" until they've had a fair chance at a two-week run. Below this,
+    // a percentage is too noisy to compare against a veteran's.
+    isNew: eligibleWeekdays > 0 && eligibleWeekdays < 10
+  };
+}
+
+function consistencyPct(stats) {
+  return stats.eligibleWeekdays > 0
+    ? Math.round((stats.loggedWeekdays / stats.eligibleWeekdays) * 100)
+    : null;
+}
+
 function referralStatus(r) {
   if (r.retained_paid) return "Fully paid";
   if (r.retained_90) return "Retained \u2014 90 day";
@@ -1663,12 +1749,28 @@ function AdvisorView(props) {
     // pesos, and both screens call it with the same arguments.
     myReceivable = props.myReceivable || { confirmed: 0, projected: 0, total: 0, items: [] },
     referralUpdates = props.referralUpdates || [], onAckReferralUpdates = props.onAckReferralUpdates,
-    section = props.section || "today", hasTeamData = !!props.hasTeamData;
+    section = props.section || "today", hasTeamData = !!props.hasTeamData,
+    // Patch 9: already-in-memory inputs for the self-consistency grid.
+    // myEntriesByDate is App's myEntries verbatim (keyed by entry_date),
+    // so this adds no fetch and no schema change.
+    myEntriesByDate = props.myEntriesByDate || {}, myRosterRow = props.myRosterRow || null,
+    unitMedianPct = props.unitMedianPct;
  
   // RULE 12: a half-typed candidate name survives a tab switch, a back
   // gesture, or an accidental reload. Cleared only on a successful save.
   var newRefDraft = useDraft("referral-name-" + (myCode || "anon"), "");
   var newRefName = newRefDraft[0], setNewRefName = newRefDraft[1], clearRefDraft = newRefDraft[2];
+  // Patch 9: the 30-day grid sits behind a tap rather than replacing the
+  // Mon-Fri strip. The strip answers "am I on track this week"; the grid
+  // answers "what does my month actually look like" — a different, heavier
+  // question that shouldn't be the first thing on the screen.
+  var gridOpenState = useState(false); var gridOpen = gridOpenState[0], setGridOpen = gridOpenState[1];
+  var myConsistency = consistencyStatsFrom(
+    myEntriesByDate,
+    advisorStartDateFrom(myRosterRow || {}, myEntriesByDate),
+    last30Days()
+  );
+  var myConsistencyPct = consistencyPct(myConsistency);
   var refSavingState = useState(false); var refSaving = refSavingState[0], setRefSaving = refSavingState[1];
   var refMsgState = useState(""); var refMsg = refMsgState[0], setRefMsg = refMsgState[1];
   var refOkState = useState(true); var refOk = refOkState[0], setRefOk = refOkState[1];
@@ -1854,6 +1956,65 @@ function AdvisorView(props) {
               h("div", { style: { color: earned ? COLORS.brass : COLORS.slate }, className: "text-[9px]" }, earned ? "Earned" : toGo + " to go")
             );
           })
+        ),
+
+        // Patch 9: the same 30-day grid the manager sees, for yourself
+        // only. Same function, same tenure-aware denominator — an advisor
+        // reading their own number is reading the manager's number.
+        h("button", {
+          type: "button",
+          onClick: function () {
+            var next = !gridOpen;
+            setGridOpen(next);
+            if (next && myCode) logEvent("self_consistency_opened", myCode, { pct: myConsistencyPct });
+          },
+          style: { borderColor: COLORS.line, color: COLORS.slate },
+          className: "w-full mt-3 py-2.5 rounded-xl border text-xs font-mono active:scale-[0.98] transition-transform"
+        }, gridOpen ? "Hide last 30 days" : "View last 30 days"),
+
+        gridOpen && h("div", { className: "mt-3" },
+          h("div", { className: "flex items-baseline justify-between gap-2 mb-2" },
+            h("div", { style: { color: COLORS.slate }, className: "text-[10px] font-mono uppercase tracking-wide" }, "Last 30 days"),
+            h("div", { style: { color: COLORS.slate }, className: "text-[10px] font-mono" },
+              myConsistency.eligibleWeekdays === 0
+                ? "not started"
+                : myConsistency.loggedWeekdays + "/" + myConsistency.eligibleWeekdays + " weekdays \u00b7 " + myConsistencyPct + "%")
+          ),
+          h("div", { style: { display: "grid", gridTemplateColumns: "repeat(30, 1fr)", gap: "2.5px" } },
+            myConsistency.cells.map(function (c, idx) {
+              if (c.preTenure) {
+                return h("div", {
+                  key: idx,
+                  title: c.date + " \u2014 before you joined",
+                  style: {
+                    background: "transparent", border: "1px solid " + COLORS.line,
+                    opacity: 0.45, height: "10px", borderRadius: "2px", boxSizing: "border-box"
+                  }
+                });
+              }
+              var bg = c.lit ? (c.full ? COLORS.brass : COLORS.good) : COLORS.line;
+              var op = (!c.lit && c.weekend) ? 0.35 : 1;
+              return h("div", {
+                key: idx,
+                title: c.date + (c.lit ? (c.full ? " \u2014 full funnel" : " \u2014 logged") : " \u2014 missed"),
+                style: { background: bg, opacity: op, height: "10px", borderRadius: "2px" }
+              });
+            })
+          ),
+          h("div", { style: { color: COLORS.slate }, className: "text-[10px] leading-relaxed mt-2" },
+            "Gold = full funnel, teal = logged, dim = missed, hollow = before you joined. You're only scored against the weekdays you've actually been on the system."),
+
+          // A percentage with nothing to sit against reads as a verdict.
+          // The unit median is the smallest thing that turns it back into
+          // a position — and it names no one.
+          myConsistency.isNew
+            ? h("div", { style: { color: COLORS.slate }, className: "text-[10px] font-mono mt-2" },
+                "Still your first two weeks \u2014 too early for a fair percentage.")
+            : (typeof unitMedianPct === "number" && myConsistencyPct !== null && h("div", {
+                style: { color: COLORS.slate }, className: "text-[10px] font-mono mt-2"
+              }, "Unit median " + unitMedianPct + "%" + (
+                myConsistencyPct >= unitMedianPct ? " \u00b7 you're at or above it" : ""
+              )))
         )
       )
     )
@@ -1959,35 +2120,12 @@ function AdvisorView(props) {
       referralOwed === 0 && projectedTotal === 0 && h("div", { style: { color: COLORS.slate }, className: "text-xs mt-2" }, "Nothing confirmed yet \u2014 keep logging and referring to build this up.")
     ),
 
-      // Patch 6: a manager confirming a referral milestone used to be
-      // completely silent on the advisor's side. This card is the in-app
-      // half of that — it appears the first time the app sees a stage flag
-      // that wasn't there last time, and clears when acknowledged. Real
-      // push for this needs a server-side sender (see the release notes).
-      referralUpdates.length > 0 && h("div", {
-        style: { background: "rgba(93,163,109,0.10)", borderColor: COLORS.good },
-        className: "rounded-2xl border p-4"
-      },
-        h("div", { style: { color: COLORS.good }, className: "text-[11px] uppercase tracking-wide font-mono mb-2" },
-          referralUpdates.length === 1 ? "Referral milestone confirmed" : referralUpdates.length + " referral milestones confirmed"),
-        h("div", { className: "space-y-1.5 mb-3" },
-          referralUpdates.map(function (u, idx) {
-            return h("div", { key: idx, className: "flex items-baseline justify-between gap-3" },
-              h("div", { className: "min-w-0" },
-                h("div", { style: { color: COLORS.ink }, className: "text-sm font-medium truncate" }, u.name),
-                h("div", { style: { color: COLORS.slate }, className: "text-[11px]" }, u.label)
-              ),
-              h("div", { style: { color: COLORS.good }, className: "font-mono text-sm font-semibold shrink-0" }, "+" + fmtPhp(u.amount))
-            );
-          })
-        ),
-        h("button", {
-          type: "button",
-          onClick: onAckReferralUpdates,
-          style: { borderColor: COLORS.good, color: COLORS.good },
-          className: "w-full py-2 rounded-xl border text-sm font-semibold active:scale-[0.98] transition-transform"
-        }, "Got it")
-      ),
+      // Patch 6's referral-milestone card stood here, on the Rewards tab.
+      // Patch 9 moves it into the "since your last visit" digest on the
+      // Chats screen (see DigestCard) — the app opens on Chats, so a
+      // confirmation posted here was only ever seen by an advisor who went
+      // looking for it. The digest shows on every open while a milestone
+      // is unacknowledged, so nothing is now less visible than it was.
  
       h("div", null,
       h(SectionTitle, { label: "This month \u2014 three lanes" }),
@@ -2351,75 +2489,15 @@ function ManagerView(props) {
  
   var listIsCold = !!loading && teamEntries.length === 0;
  
-  // 30-day consistency grid: one cell per calendar day (oldest \u2192 today),
-  // built entirely from teamEntries already in memory \u2014 no extra fetch.
-  // Weekends are flagged (not excluded) so a missed Saturday can render
-  // differently from a missed Tuesday, matching the Mon-Fri assumption
-  // already used by currentStreakFrom/bestStreakFrom elsewhere in this file.
-  var last30 = (function () {
-    var days = [];
-    for (var i = 29; i >= 0; i--) {
-      var d = new Date();
-      d.setDate(d.getDate() - i);
-      var dow = d.getDay();
-      days.push({ date: localDateStr(d), weekend: dow === 0 || dow === 6 });
-    }
-    return days;
-  })();
-  var last30WeekdayCount = last30.filter(function (d) { return !d.weekend; }).length;
- 
-  // An advisor's first day ON THE SYSTEM. Days before this are not misses —
-  // the tool didn't exist for them yet — so they must not be counted in the
-  // denominator or drawn the same colour as a missed day.
-  //
-  // Takes the EARLIEST of (roster created_at, first entry) deliberately. Using
-  // first-entry alone would let someone who joined three weeks ago and logged
-  // once yesterday score 1/1 = perfect, which is a worse lie than the fixed-22
-  // denominator this replaces. created_at is parsed through localDateStr so a
-  // UTC timestamp lands on the right Manila calendar day.
-  var advisorStartDate = function (r) {
-    var candidates = [];
-    if (r.started_on) candidates.push(String(r.started_on).slice(0, 10));
-    if (r.created_at) {
-      var parsed = new Date(r.created_at);
-      if (!isNaN(parsed.getTime())) candidates.push(localDateStr(parsed));
-    }
-    var firstEntry = null;
-    teamEntries.forEach(function (e) {
-      if (e.advisor_code !== r.code) return;
-      if (!firstEntry || e.entry_date < firstEntry) firstEntry = e.entry_date;
-    });
-    if (firstEntry) candidates.push(firstEntry);
-    if (candidates.length === 0) return null;
-    return candidates.sort()[0];
-  };
+  // Patch 9: the grid math moved to module level (last30Days /
+  // entriesByDate / advisorStartDateFrom / consistencyStatsFrom) so the
+  // advisor's own grid and this one cannot disagree. Behaviour here is
+  // unchanged; only the location of the arithmetic moved.
+  var last30 = last30Days();
  
   var consistencyStats = function (r) {
-    var code = r.code;
-    var startStr = advisorStartDate(r);
-    var byDate = {};
-    teamEntries.forEach(function (e) { if (e.advisor_code === code) byDate[e.entry_date] = e; });
-    var loggedWeekdays = 0, eligibleWeekdays = 0;
-    var cells = last30.map(function (day) {
-      var preTenure = !!startStr && day.date < startStr;
-      var e = byDate[day.date];
-      var lit = entryTotal(e) > 0;
-      var full = isFullFunnel(e);
-      if (!day.weekend && !preTenure) {
-        eligibleWeekdays++;
-        if (lit) loggedWeekdays++;
-      }
-      return { date: day.date, weekend: day.weekend, lit: lit, full: full, preTenure: preTenure };
-    });
-    return {
-      cells: cells,
-      loggedWeekdays: loggedWeekdays,
-      eligibleWeekdays: eligibleWeekdays,
-      startStr: startStr,
-      // "New" until they've had a fair chance at a two-week run. Below this,
-      // a percentage is too noisy to compare against a veteran's.
-      isNew: eligibleWeekdays > 0 && eligibleWeekdays < 10
-    };
+    var byDate = entriesByDate(teamEntries, r.code);
+    return consistencyStatsFrom(byDate, advisorStartDateFrom(r, byDate), last30);
   };
  
   return h("div", { className: "px-5 mt-6 space-y-6" },
@@ -2489,9 +2567,7 @@ function ManagerView(props) {
           ? h("div", { style: { color: COLORS.slate }, className: "p-4 text-sm text-center" }, "No active advisors.")
           : activeAdvisors.slice(0, consInc.count).map(function (r) {
               var stats = consistencyStats(r);
-              var pct = stats.eligibleWeekdays > 0
-                ? Math.round((stats.loggedWeekdays / stats.eligibleWeekdays) * 100)
-                : null;
+              var pct = consistencyPct(stats);
               return h("div", { key: r.code, className: "px-4 py-3" },
                 h("div", { className: "flex items-center justify-between gap-2 mb-2" },
                   h("div", { className: "flex items-center gap-2 min-w-0" },
@@ -3883,7 +3959,7 @@ function isOneSignalConfigured() {
 }
  
 var APP_NAME = "Unit App";
-var APP_VERSION = "5.4.0-patch8";
+var APP_VERSION = "5.5.0-patch9";
  
 function isSupabaseConfigured() {
   return SUPABASE_URL.indexOf("YOUR-PROJECT") === -1 && SUPABASE_ANON_KEY.indexOf("YOUR-ANON") === -1;
@@ -4937,6 +5013,59 @@ function CloseBtn(props) {
   }, "✕");
 }
  
+// ---- Patch 9: "since your last visit" -----------------------------------
+// Lives on the Chats screen because that is where the app opens. A digest
+// on a tab the advisor has to navigate to is not a digest.
+//
+// Shown on the first open of each calendar day, and additionally on any
+// open while a referral milestone is still unacknowledged — otherwise a
+// manager's confirmation could sit invisible until tomorrow.
+//
+// Suppressed entirely when there is nothing to report. "Nothing new" is a
+// null reward and teaches the advisor to stop reading the card.
+//
+// Rank change is deliberately absent. Rank is zero-sum and resets weekly,
+// so a digest built on it greets roughly half the unit with a demotion on
+// open. Nothing that opens the app should lead with a punishment.
+function DigestCard(props) {
+  var d = props.digest || {};
+  var updates = d.referralUpdates || [];
+  var overdue = d.overdueCount || 0;
+  var visible = (d.open || updates.length > 0) && (updates.length > 0 || overdue > 0);
+  if (!visible) return null;
+
+  return h("div", {
+    style: { background: "rgba(45,212,191,0.10)", borderColor: C.good },
+    className: "rounded-2xl border p-4 mb-6"
+  },
+    h("div", { style: { color: C.good }, className: "text-[11px] uppercase tracking-wide font-mono mb-2" },
+      d.open
+        ? "Since your last visit"
+        : (updates.length === 1 ? "Referral milestone confirmed" : updates.length + " referral milestones confirmed")),
+    updates.length > 0 && h("div", { className: "space-y-1.5 mb-3" },
+      updates.map(function (u, idx) {
+        return h("div", { key: idx, className: "flex items-baseline justify-between gap-3" },
+          h("div", { className: "min-w-0" },
+            h("div", { style: { color: C.text }, className: "text-sm font-medium truncate" }, u.name),
+            h("div", { style: { color: C.muted }, className: "text-[11px]" }, u.label)
+          ),
+          h("div", { style: { color: C.good }, className: "font-mono text-sm font-semibold shrink-0" }, "+" + fmtPhp(u.amount))
+        );
+      })
+    ),
+    overdue > 0 && h("div", { style: { color: C.text }, className: "text-sm mb-3" },
+      overdue === 1
+        ? "1 conversation has gone 7+ days without a touch."
+        : overdue + " conversations have gone 7+ days without a touch."),
+    h("button", {
+      type: "button",
+      onClick: d.onDismiss,
+      style: { borderColor: C.good, color: C.good },
+      className: "w-full py-2 rounded-xl border text-sm font-semibold active:scale-[0.98] transition-transform"
+    }, "Got it")
+  );
+}
+
 function HomeScreen(props) {
   var convos = props.convos;
   var q = props.search.trim().toLowerCase();
@@ -4957,6 +5086,8 @@ function HomeScreen(props) {
   // would render a second shield and a second "Battle River Unit" right
   // underneath the first one.
   return h("div", { className: "max-w-md mx-auto px-5 pt-5 pb-16" },
+ 
+    h(DigestCard, { digest: props.digest }),
  
     props.restoreOffer && h("div", {
       style: { background: C.surfaceAlt, borderColor: C.gold },
@@ -6803,7 +6934,8 @@ function ScriptSection(props) {
         prospectCount: prospects.length,
         onOpenNames: props.onOpenNames,
         onQuickAdd: openQuickAdd,
-        onAddAdvisor: props.onAddAdvisor
+        onAddAdvisor: props.onAddAdvisor,
+        digest: props.digest
       }),
       overlays
     );
@@ -7625,6 +7757,77 @@ function App() {
     setReferralSeen(next);
   }
 
+  // ---- Patch 9: "since your last visit" = first open of a calendar day ---
+  // A visit is a calendar day, not a page load. A PWA that gets left open
+  // and reloaded four times shouldn't burn its one digest on the first of
+  // those and show three empty ones after; and a day boundary is the only
+  // unit an advisor already thinks in ("did I log yesterday").
+  var digestSeenKey = myCode ? "br-digest-seen-" + myCode : null;
+  var digestOpenState = useState(false); var digestOpen = digestOpenState[0], setDigestOpen = digestOpenState[1];
+  useEffect(function () {
+    if (!digestSeenKey) { setDigestOpen(false); return; }
+    setDigestOpen(lget(digestSeenKey, null) !== today);
+  }, [digestSeenKey, today]);
+
+  function dismissDigest() {
+    if (digestSeenKey) lset(digestSeenKey, today);
+    setDigestOpen(false);
+    ackReferralUpdates();
+  }
+
+  // ---- Patch 9: referrals on the screen the app actually opens on --------
+  // loadTeamData only runs when dataScope is "team", and Chats is not an
+  // advisor tab, so on the landing screen `referrals` was empty — a
+  // milestone a manager had already confirmed could never reach the
+  // digest there. This is one advisor-scoped read, not a second copy of
+  // the team load, and it merges into the SAME `referrals` state every
+  // other reader already uses, so there is still exactly one source of
+  // referral rows. Skipped entirely whenever the team-wide load applies.
+  //
+  // A myCode-scoped set is safe for every current reader: computeReceivable
+  // filters on recipient_code anyway, ManagerView only renders under
+  // dataScope "team" where the full load has run, and the search sheet
+  // previously matched against an empty array on this screen.
+  useEffect(function () {
+    if (!myCode || dataScope === "team" || referralsLoaded) return;
+    var cancelled = false;
+    sb.from("referrals").select("*").eq("recipient_code", myCode).then(function (res) {
+      if (cancelled || !res || res.error) return;
+      setReferrals(function (prev) {
+        var byId = {};
+        (prev || []).forEach(function (r) { byId[String(r.id)] = r; });
+        (res.data || []).forEach(function (r) { byId[String(r.id)] = r; });
+        return Object.keys(byId).map(function (k) { return byId[k]; });
+      });
+      setReferralsLoaded(true);
+    }, function () {});
+    return function () { cancelled = true; };
+    // eslint-disable-next-line
+  }, [myCode, dataScope, referralsLoaded]);
+
+  // The advisor's own roster row, for the tenure-aware denominator. Without
+  // it advisorStartDateFrom falls back to first-entry-only, which is the
+  // flattering lie the manager grid deliberately avoids.
+  var myRosterRow = roster.filter(function (r) { return r.code === myCode; })[0] || null;
+
+  // Median consistency across advisors who have had a fair run at it, so a
+  // percentage on the advisor's own screen has something to sit against.
+  // Aggregate only — no names, no per-advisor figures leave the manager view.
+  var unitMedianPct = (function () {
+    var d30 = last30Days();
+    var pcts = [];
+    activeRoster.forEach(function (r) {
+      var byDate = entriesByDate(teamEntries, r.code);
+      var s = consistencyStatsFrom(byDate, advisorStartDateFrom(r, byDate), d30);
+      if (s.isNew || s.eligibleWeekdays === 0) return;
+      pcts.push(consistencyPct(s));
+    });
+    if (pcts.length < 3) return null;   // too few to be a median of anything
+    pcts.sort(function (a, b) { return a - b; });
+    var mid = Math.floor(pcts.length / 2);
+    return pcts.length % 2 ? pcts[mid] : Math.round((pcts[mid - 1] + pcts[mid]) / 2);
+  })();
+
   // ---- Patch 6: the tour flag is finally read ----------------------------
   // Written since the tour shipped, never checked, so three slides that
   // explain the whole mental model were reaching only advisors who went
@@ -7828,6 +8031,10 @@ function App() {
           onSetHighlight: function (id) { navigate({ prospect: id || null }, false); },
           onClearFocus: function () { navigate({ focus: null }, false); },
           onOverdueCount: setOverdueCount,
+          digest: {
+            open: digestOpen, referralUpdates: referralUpdates,
+            overdueCount: overdueCount, onDismiss: dismissDigest
+          },
           onBack: goBackOne,
           onOpenQuickAdd: function () { navigate({ sheet: "quickadd" }, true); },
           onCloseQuickAdd: closeSheet,
@@ -7873,7 +8080,8 @@ function App() {
         lastSyncedAt: lastSyncedAt,
         awardProgress: awardProgress,
         hasTeamData: teamEntries.length > 0,
-        avatarByCode: avatarByCode
+        avatarByCode: avatarByCode,
+        myEntriesByDate: myEntries, myRosterRow: myRosterRow, unitMedianPct: unitMedianPct
       }),
       view === "manager" && isManager && h(ManagerView, {
         date: today, roster: roster, activeRoster: activeRoster, teamEntries: teamEntries, loading: teamLoading, onRefresh: loadTeamData,
