@@ -3959,7 +3959,7 @@ function isOneSignalConfigured() {
 }
  
 var APP_NAME = "Unit App";
-var APP_VERSION = "5.5.0-patch9";
+var APP_VERSION = "5.6.0-patch10";
  
 function isSupabaseConfigured() {
   return SUPABASE_URL.indexOf("YOUR-PROJECT") === -1 && SUPABASE_ANON_KEY.indexOf("YOUR-ANON") === -1;
@@ -4276,10 +4276,174 @@ var STEPS = {
     note: "Naka-log na sa Dashboard mo ang Client Closed \u2014 hindi mo na kailangan i-type ulit. Habang masaya pa siya, tanungin mo na kung sino pa ang pwede mong matulungan.",
     scripts: [],
     choices: [{ label: "Start a new conversation", next: "home" }]
+  },
+ 
+  // ===================== HEALTH TRACK =====================
+  // Critical health plan (114 illnesses). Runs approach → relationship
+  // → prospect → appointment and stops there: the deck has no
+  // presentation or closing section, so a health sale is logged by hand
+  // in the Dashboard rather than auto-logged by h_handoff.
+  // ========================================================
+ 
+  h_start: {
+    stage: "approach",
+    title: "The opener",
+    note: "Use this AFTER your Genuine Connection approach \u2014 never cold.",
+    scripts: ["Hello {name}, Naisip kita:) Ask ko lang sana kung meron kana critical plan? Hehe Thank youuuu! \u263A"],
+    choices: [
+      { label: "\u201CAno yung critical health plan?\u201D / \u201CWala pa eh\u201D", next: "h_explain_health" },
+      { label: "\u201CYes meron na.\u201D", next: "h_has_plan" },
+      { label: "Seen / walang reply", next: "h_seen_opener" }
+    ]
+  },
+ 
+  h_explain_health: {
+    stage: "relationship",
+    title: "Explain the critical health plan",
+    note: "One sentence. Lead with the coverage, hindi yung product name.",
+    scripts: ["Bale health plan siya na covered ka for 114 critical illnesses:) Kasama dito ang cancer, stroke and heart attack plus may income ka kapag na admit sa hospital"],
+    choices: [{ label: "Next \u2014 ask for details", next: "h_ask_details" }]
+  },
+ 
+  h_has_plan: {
+    stage: "relationship",
+    title: "May plan na siya",
+    scripts: ["Niceee, ayos yan hehe. Thank you for having one as early as now! Follow-up ako sayo soon ha :)"],
+    choices: [
+      { label: "Sun Life yung current plan", next: "h_pass_sunlife" },
+      { label: "Ibang company", next: "h_other_company" }
+    ]
+  },
+ 
+  h_pass_sunlife: {
+    stage: "relationship",
+    title: "Pass na agad",
+    note: "Kapag Sun Life yung current plan, hindi na ineentertain \u2014 pass na agad. Keep the relationship warm, move on to the next prospect.",
+    scripts: [],
+    choices: [{ label: "Back to start", next: "h_start" }]
+  },
+ 
+  h_other_company: {
+    stage: "relationship",
+    title: "Ibang company",
+    note: "Alamin yung plan na meron siya. Kung VUL yung hawak niya, ialok mo ang SFW.",
+    scripts: [],
+    choices: [{ label: "Proceed \u2014 offer sample plan", next: "h_ask_details" }]
+  },
+ 
+  h_seen_opener: {
+    stage: "approach",
+    title: "Seen zone \u2014 follow up",
+    note: "Chat again after 2 weeks or 1 month until mag reply. Rotate between these two so hindi paulit-ulit.",
+    scripts: [
+      "Hello {name}, Good afternoon! Ask ko lang sana kung meron kana health plan? Hehe Thank youuu! \u263A",
+      "Hello {name}, Goodaftie!:) Ask ko lang sana kung meron kana Insurance with investment plan with Sun Life? Hehe Thank youuuu! \u263A"
+    ],
+    choices: [
+      { label: "Nag-reply na siya", next: "h_start" },
+      { label: "Still seen \u2014 park muna", next: "home" }
+    ]
+  },
+ 
+  h_ask_details: {
+    stage: "prospect",
+    title: "Ask for name & birthday",
+    scripts: ["Pwede kita gawan ng sample health plan na pasok sa budget mo:) Send mo lang sakin yung details mo\n\nFull Name:\nDate of Birth:\n\nThank you! \u263A"],
+    choices: [
+      { label: "Nagsend ng name at birthday", next: "h_got_details" },
+      { label: "Seen / hindi pa nagsend", next: "h_chase_details" }
+    ]
+  },
+ 
+  h_chase_details: {
+    stage: "prospect",
+    title: "Chase the details",
+    note: "Cold market: weekly. Warm market: daily. Follow up until magsend.",
+    scripts: [
+      "Hello {name}, kamusta? If ever hindi kana busy send mo na sa akin yung full name at bday mo ah para magawan na kita ng quotation hehe. Thank you! \u263A",
+      "Hello {name}, kamusta? If ever hindi kana busy beke nemen pwede mo na send sa akin yung full name at bday mo ah para magawan na kita ng quotation hehe. Thank you! \u263A"
+    ],
+    choices: [
+      { label: "Nagsend na", next: "h_got_details" },
+      { label: "Wala pa \u2014 park muna", next: "home" }
+    ]
+  },
+ 
+  h_got_details: {
+    stage: "prospect",
+    title: "Confirm you're making the quotation",
+    scripts: [
+      "Ayun! Thank you sige gawa lang kita ng sample Life Plan tapos set ako quick 15 mins zoom meeting ha:) Thankyou!:)",
+      "Ayun! Thank you sige gawan lang kita ng quotation tapos send and discuss ko sayo quickly online ha"
+    ],
+    choices: [{ label: "Next \u2014 set the appointment", next: "h_appt_day" }]
+  },
+ 
+  h_appt_day: {
+    stage: "appointment",
+    title: "Appointment \u2014 weekend or weekday?",
+    note: "Never ask \u201Cpwede ba tayo mag-meet?\u201D \u2014 that's a yes/no. Always give two options.",
+    scripts: [
+      "Hi {name}:) Kailan ka pwede for a quick online meeting:) weekends or weekdays?",
+      "Hi {name}:) Nagawa ko na yung sample Life Plan mo with Sun Life:) Kailan ka pwede for a quick online meeting:) Weekends or weekdays?"
+    ],
+    choices: [
+      { label: "Sabi niya weekdays", next: "h_appt_weekday" },
+      { label: "Sabi niya weekends", next: "h_appt_weekend" },
+      { label: "Seen / walang sagot", next: "h_chase_appt" }
+    ]
+  },
+ 
+  h_appt_weekday: {
+    stage: "appointment",
+    title: "Narrow the day",
+    scripts: ["Monday or Tuesday? (Depende sa availability mo)"],
+    choices: [{ label: "Next \u2014 lock the time", next: "h_appt_time" }]
+  },
+ 
+  h_appt_weekend: {
+    stage: "appointment",
+    title: "Narrow the day",
+    scripts: ["Saturday or Sunday?"],
+    choices: [{ label: "Next \u2014 lock the time", next: "h_appt_time" }]
+  },
+ 
+  h_appt_time: {
+    stage: "appointment",
+    title: "Lock the time",
+    scripts: ["10 AM or 11 AM?", "7 pm or 8 pm?"],
+    choices: [{ label: "Next \u2014 confirm it", next: "h_appt_confirm" }]
+  },
+ 
+  h_appt_confirm: {
+    stage: "appointment",
+    title: "Confirm the appointment",
+    note: "State it back as a done deal. \u201CQuick 15 mins\u201D lowers the cost of saying yes. Palitan yung day/time ng napagkasunduan.",
+    scripts: ["Okay:) See you {name} Monday, 7 pm via online for our quick 15 mins meeting ha:)"],
+    choices: [{ label: "Meeting is set \u2014 hand off", next: "h_handoff" }]
+  },
+ 
+  h_chase_appt: {
+    stage: "appointment",
+    title: "Chase the appointment",
+    note: "Walang canned lines pa ang health deck para dito \u2014 sarili mong words muna. Pwede ka rin mag-reply sa posts/stories niya sa IG at FB para mag-warm ulit, tapos balikan mo yung appointment question.",
+    scripts: [],
+    choices: [
+      { label: "Nag-reply na", next: "h_appt_day" },
+      { label: "Wala pa \u2014 park muna", next: "home" }
+    ]
+  },
+ 
+  h_handoff: {
+    stage: "appointment",
+    title: "Handed off to the meeting",
+    note: "Tapos na ang trabaho ng chat script dito \u2014 naka-log na ang Appointments Set +1. Ang health script ay walang closing section, kaya kapag naka-close ka pagkatapos ng meeting, ikaw mismo ang mag-log ng Client Closed sa Dashboard mo.",
+    scripts: [],
+    choices: [{ label: "Start a new conversation", next: "home" }]
   }
 };
  
-var FINISHED = { done: true, pass_sunlife: true };
+var FINISHED = { done: true, pass_sunlife: true, h_pass_sunlife: true, h_handoff: true };
  
 var STEP_PROGRESS = {
   start: 0,
@@ -4307,8 +4471,123 @@ var STEP_PROGRESS = {
   chase_forms: 100,
   close_bank: 100,
   close_payment: 100,
-  done: 100
+  done: 100,
+ 
+  h_start: 0,
+  h_seen_opener: 5,
+  h_explain_health: 15,
+  h_has_plan: 15,
+  h_other_company: 20,
+  h_pass_sunlife: 20,
+  h_ask_details: 30,
+  h_chase_details: 35,
+  h_got_details: 50,
+  h_chase_appt: 55,
+  h_appt_day: 60,
+  h_appt_weekday: 70,
+  h_appt_weekend: 70,
+  h_appt_time: 85,
+  h_appt_confirm: 100,
+  h_handoff: 100
 };
+ 
+
+// ======================================================================
+// SCRIPT TRACKS
+//
+// Two chat scripts share one STEPS object. Health step keys carry an "h_"
+// prefix, which makes the track derivable from the step alone — nothing
+// extra is stored, so a conversation restored onto a second phone comes
+// back on the right script without a schema change.
+//
+// The payout track runs all six stages through to a logged close. The
+// health deck stops at the appointment, so its terminal step is a handoff,
+// not a close: h_handoff logs nothing, and the advisor records the sale in
+// the Dashboard by hand. Nothing in the health track can reach "done".
+// ======================================================================
+var SCRIPT_PAYOUT = "payout";
+var SCRIPT_HEALTH = "health";
+ 
+var SCRIPT_META = {
+  payout: {
+    key: SCRIPT_PAYOUT,
+    label: "Yearly Payout",
+    short: "Payout",
+    start: "start",
+    blurb: "Traditional \u2014 yearly pension from year 6"
+  },
+  health: {
+    key: SCRIPT_HEALTH,
+    label: "Critical Health",
+    short: "Health",
+    start: "h_start",
+    blurb: "114 critical illnesses + hospital income"
+  }
+};
+ 
+var SCRIPT_ORDER = [SCRIPT_PAYOUT, SCRIPT_HEALTH];
+ 
+function scriptOf(stepKey) {
+  return (typeof stepKey === "string" && stepKey.indexOf("h_") === 0) ? SCRIPT_HEALTH : SCRIPT_PAYOUT;
+}
+ 
+function scriptMeta(key) { return SCRIPT_META[key] || SCRIPT_META[SCRIPT_PAYOUT]; }
+function scriptStartStep(key) { return scriptMeta(key).start; }
+function otherScript(key) { return key === SCRIPT_HEALTH ? SCRIPT_PAYOUT : SCRIPT_HEALTH; }
+ 
+// The appointment log fires on either track — a health appointment is an
+// appointment. The close does not: only the payout track has a "done".
+function isApptConfirmStep(stepKey) {
+  return stepKey === "appt_confirm" || stepKey === "h_appt_confirm";
+}
+ 
+// Steps that exist on both tracks, listed once and inverted below so the
+// two directions can never drift apart. "done" is deliberately absent:
+// mapping anything onto it would fire a Clients Closed +1 on a switch.
+var SCRIPT_PARALLEL = [
+  ["start", "h_start"],
+  ["seen_opener", "h_seen_opener"],
+  ["explain_payout", "h_explain_health"],
+  ["has_plan", "h_has_plan"],
+  ["pass_sunlife", "h_pass_sunlife"],
+  ["other_company", "h_other_company"],
+  ["ask_details", "h_ask_details"],
+  ["chase_details", "h_chase_details"],
+  ["got_details", "h_got_details"],
+  ["appt_day", "h_appt_day"],
+  ["appt_weekday", "h_appt_weekday"],
+  ["appt_weekend", "h_appt_weekend"],
+  ["appt_time", "h_appt_time"],
+  ["appt_confirm", "h_appt_confirm"],
+  ["chase_appt", "h_chase_appt"]
+];
+ 
+var SCRIPT_SWITCH_MAP = (function () {
+  var map = {};
+  SCRIPT_PARALLEL.forEach(function (pair) {
+    map[pair[0]] = pair[1];
+    map[pair[1]] = pair[0];
+  });
+  // Payout steps past the appointment have no health parallel. The client's
+  // name and birthday are already in hand at that point, so the honest
+  // landing is "making the quotation", not back at the opener.
+  ["present_intro", "benefit_life", "benefit_disability", "benefit_payout",
+   "questions", "chase_present", "forms", "chase_forms",
+   "close_bank", "close_payment", "done"].forEach(function (k) {
+    map[k] = "h_got_details";
+  });
+  map.h_handoff = "got_details";
+  return map;
+})();
+ 
+// Never returns a step on the track it was given, and never returns "done".
+function switchTargetStep(stepKey) {
+  var target = SCRIPT_SWITCH_MAP[stepKey];
+  if (!target || !STEPS[target] || target === "done") {
+    return scriptStartStep(otherScript(scriptOf(stepKey)));
+  }
+  return target;
+}
  
 function scriptProgress(stepKey) {
   var v = STEP_PROGRESS[stepKey];
@@ -4785,11 +5064,11 @@ function csvEscape(v) {
 }
  
 function exportCSV(advisor, convos) {
-  var rows = [["id", "client_name", "step_key", "step_title", "stage", "created", "updated"]];
+  var rows = [["id", "client_name", "script", "step_key", "step_title", "stage", "created", "updated"]];
   convos.forEach(function (c) {
     var step = STEPS[c.step] || STEPS.start;
     rows.push([
-      c.id, c.name, c.step, step.title, step.stage,
+      c.id, c.name, scriptMeta(scriptOf(c.step)).label, c.step, step.title, step.stage,
       c.created ? new Date(c.created).toISOString() : "",
       c.updated ? new Date(c.updated).toISOString() : ""
     ]);
@@ -5135,6 +5414,28 @@ function HomeScreen(props) {
  
     h("div", { style: { background: C.surface, borderColor: C.line }, className: "rounded-2xl border p-4 mb-7" },
       h("div", { style: { color: C.muted }, className: "text-[11px] tracking-widest uppercase font-mono mb-2.5" }, "New conversation"),
+ 
+      h("div", { className: "flex gap-2 mb-2.5" },
+        SCRIPT_ORDER.map(function (key) {
+          var meta = SCRIPT_META[key];
+          var on = props.newScript === key;
+          return h("button", {
+            key: key,
+            onClick: function () { props.setNewScript(key); },
+            style: {
+              background: on ? C.gold : "transparent",
+              color: on ? COLORS.parchment : C.muted,
+              borderColor: on ? C.gold : C.line
+            },
+            className: "flex-1 px-3 py-2 rounded-xl border text-left active:scale-[0.98] transition-transform",
+            "aria-pressed": on ? "true" : "false"
+          },
+            h("div", { className: "text-[13px] font-semibold leading-tight" }, meta.label),
+            h("div", { className: "text-[10px] leading-snug mt-0.5", style: { opacity: on ? 0.75 : 0.8 } }, meta.blurb)
+          );
+        })
+      ),
+ 
       h("input", {
         value: props.newName,
         onChange: function (ev) { props.setNewName(ev.target.value); },
@@ -5147,7 +5448,7 @@ function HomeScreen(props) {
         onClick: props.onStart,
         style: { background: C.gold, color: COLORS.parchment },
         className: "w-full py-3.5 rounded-xl font-bold active:scale-[0.98] transition-transform"
-      }, "Start script")
+      }, "Start " + scriptMeta(props.newScript).short + " script")
     ),
  
     convos.length > 0 && h("div", null,
@@ -5221,6 +5522,10 @@ function HomeScreen(props) {
                 })
               ),
               h("div", { className: "flex items-center gap-2 mt-1.5 min-w-0" },
+                h("span", {
+                  style: { color: C.muted, borderColor: C.line },
+                  className: "text-[9px] font-mono uppercase tracking-wider border rounded px-1.5 py-0.5 shrink-0"
+                }, scriptMeta(scriptOf(c.step)).short),
                 h("span", { style: { background: stage.color, width: "7px", height: "7px", borderRadius: "50%", display: "inline-block", flexShrink: 0 } }),
                 h("span", { style: { color: C.muted }, className: "text-xs truncate" }, step.title)
               )
@@ -5733,7 +6038,10 @@ function StepScreen(props) {
   var step = STEPS[convo.step] || STEPS.start;
   var stage = STAGES[step.stage];
   var copiedState = useState(null); var copiedIdx = copiedState[0], setCopiedIdx = copiedState[1];
+  var askSwitchState = useState(false); var askSwitch = askSwitchState[0], setAskSwitch = askSwitchState[1];
   var level = urgency(convo);
+  var track = scriptOf(convo.step);
+  var target = otherScript(track);
  
   function doCopy(text, idx) {
     var out = fill(text, convo.name);
@@ -5757,6 +6065,10 @@ function StepScreen(props) {
       h("div", { className: "flex items-center justify-between mb-3" },
         h(BackBtn, { onClick: onHome, label: "Back to all chats" }),
         h("div", { className: "flex items-center gap-1.5" },
+          h("span", {
+            style: { color: C.muted, borderColor: C.line },
+            className: "text-[9px] font-mono uppercase tracking-wider border rounded px-1.5 py-0.5"
+          }, scriptMeta(track).short),
           h("span", { style: { background: stage.color, width: "7px", height: "7px", borderRadius: "50%", display: "inline-block" } }),
           h("span", { style: { color: stage.color }, className: "text-[11px] font-mono uppercase tracking-wider" }, stage.label)
         )
@@ -5802,7 +6114,7 @@ function StepScreen(props) {
               style: { color: C.muted, borderColor: C.line },
               className: "px-4 pt-3 pb-2 text-[10px] font-mono uppercase tracking-widest"
             }, "Option " + (idx + 1)),
-            h("div", { className: "px-4 pt-3 pb-4 text-[15px] leading-relaxed", style: { userSelect: "text" } },
+            h("div", { className: "px-4 pt-3 pb-4 text-[15px] leading-relaxed", style: { userSelect: "text", whiteSpace: "pre-line" } },
               fill(s, convo.name)),
             h("button", {
               onClick: function () { doCopy(s, idx); },
@@ -5829,10 +6141,39 @@ function StepScreen(props) {
         })
       ),
  
-      convo.step !== "start" && h("button", {
-        onClick: function () { onGo("start"); },
+      props.onSwitchScript && h("div", { className: "mt-6" },
+        !askSwitch && h("button", {
+          onClick: function () { setAskSwitch(true); },
+          style: { color: C.muted, borderColor: C.line },
+          className: "w-full py-3 rounded-xl border text-sm font-mono active:opacity-60"
+        }, "switch to the " + scriptMeta(target).short + " script"),
+ 
+        askSwitch && h("div", {
+          style: { background: C.surfaceAlt, borderColor: C.goldDim },
+          className: "rounded-xl border p-3.5"
+        },
+          h("div", { style: { color: C.goldSoft }, className: "text-[13px] leading-relaxed mb-3" },
+            "Move " + convo.name + " to the " + scriptMeta(target).label + " script? The conversation stays \u2014 you land on \u201C" +
+            ((STEPS[switchTargetStep(convo.step)] || STEPS.start).title) + "\u201D and nothing already logged to your Dashboard changes."),
+          h("div", { className: "flex gap-2" },
+            h("button", {
+              onClick: function () { setAskSwitch(false); props.onSwitchScript(convo.id); },
+              style: { background: C.gold, color: COLORS.parchment },
+              className: "flex-1 py-2.5 rounded-xl text-sm font-bold active:scale-[0.98] transition-transform"
+            }, "Switch"),
+            h("button", {
+              onClick: function () { setAskSwitch(false); },
+              style: { color: C.muted },
+              className: "px-4 py-2.5 text-sm font-mono active:opacity-60"
+            }, "Cancel")
+          )
+        )
+      ),
+ 
+      convo.step !== scriptStartStep(track) && h("button", {
+        onClick: function () { onGo(scriptStartStep(track)); },
         style: { color: C.muted },
-        className: "w-full mt-6 py-3 text-sm font-mono active:opacity-60"
+        className: "w-full mt-3 py-3 text-sm font-mono active:opacity-60"
       }, "restart this conversation")
     )
   );
@@ -6233,6 +6574,11 @@ function ScriptSection(props) {
   var activeId = props.activeConvoId;
   var setActiveId = props.onOpenConvo;
   var newNameState = useState(""); var newName = newNameState[0], setNewName = newNameState[1];
+  var newScriptState = useState(function () {
+    var a = lget("br-advisor", null);
+    var last = a ? lget("br-last-script-" + a.id, SCRIPT_PAYOUT) : SCRIPT_PAYOUT;
+    return SCRIPT_META[last] ? last : SCRIPT_PAYOUT;
+  }); var newScript = newScriptState[0], setNewScript = newScriptState[1];
   var searchState = useState(""); var search = searchState[0], setSearch = searchState[1];
   var sortState = useState(lget("br-sort", "stale")); var sortMode = sortState[0], setSortMode = sortState[1];
   var toastState = useState(null); var toast = toastState[0], setToast = toastState[1];
@@ -6539,16 +6885,18 @@ function ScriptSection(props) {
     var nm = newName.trim();
     if (!nm) { flash("Enter the client's name first"); return; }
     var now = Date.now();
-    var convo = { id: now + "-" + Math.random().toString(36).slice(2, 8), name: nm, step: "start", created: now, updated: now };
+    var track = SCRIPT_META[newScript] ? newScript : SCRIPT_PAYOUT;
+    var convo = { id: now + "-" + Math.random().toString(36).slice(2, 8), name: nm, step: scriptStartStep(track), created: now, updated: now };
     setConvos([convo].concat(convos));
     navPush();
     setActiveId(convo.id);
     setNewName("");
     setDraft(advisor.id, "newname", "");
     setSearch("");
+    lset("br-last-script-" + advisor.id, track);
     markDirty(advisor.id, convo.id);
     refreshSyncMeta();
-    logEvent("script_convo_started", advisor.code, { convo_id: convo.id, source: "new" });
+    logEvent("script_convo_started", advisor.code, { convo_id: convo.id, source: "new", script: track });
   }
  
   function goTo(stepKey) {
@@ -6568,7 +6916,7 @@ function ScriptSection(props) {
       // devices via conversation_backups), not by comparing old/new step —
       // so revisiting or restarting a conversation can never double-bump
       // Appointments Set once it's been logged.
-      if (stepKey === "appt_confirm" && !c.apptLogged) justConfirmedAppt = true;
+      if (isApptConfirmStep(stepKey) && !c.apptLogged) justConfirmedAppt = true;
       // Patch 6: same guard, same shape, for the close. Reaching "done" used
       // to log nothing at all — the step note just told the advisor to go
       // open the dashboard and type it in themselves.
@@ -6593,7 +6941,8 @@ function ScriptSection(props) {
         convo_id: changedId,
         from: fromStep,
         to: stepKey,
-        to_stage: (STEPS[stepKey] && STEPS[stepKey].stage) || null
+        to_stage: (STEPS[stepKey] && STEPS[stepKey].stage) || null,
+        script: scriptOf(stepKey)
       });
       if (justConfirmedAppt) {
         logEvent("script_appt_confirmed", advisor.code, { convo_id: changedId });
@@ -6619,6 +6968,35 @@ function ScriptSection(props) {
         });
       }
     }
+  }
+ 
+  // Moving a live conversation between the payout and health tracks.
+  //
+  // Deliberately NOT routed through goTo: a switch is not script usage, so
+  // it must not bump "approaching", and it must never pass through the
+  // milestone guards — switching onto h_appt_confirm is not a confirmed
+  // appointment and switching off the health track is not a close. The
+  // client name, created date, updated time and both logged-flags survive
+  // untouched; only the step moves, to its parallel on the other track.
+  function switchScript(convoId) {
+    var target = null, fromStep = null;
+    setConvos(convos.map(function (c) {
+      if (c.id !== convoId) return c;
+      fromStep = c.step;
+      target = switchTargetStep(c.step);
+      return Object.assign({}, c, { step: target, updated: Date.now() });
+    }));
+    if (!target) return;
+    markDirty(advisor.id, convoId);
+    refreshSyncMeta();
+    logEvent("script_switched", advisor.code, {
+      convo_id: convoId,
+      from: fromStep,
+      to: target,
+      from_script: scriptOf(fromStep),
+      to_script: scriptOf(target)
+    });
+    flash("Switched to the " + scriptMeta(scriptOf(target)).short + " script");
   }
  
   // Copying a line means it got sent — on the "chase" steps the advisor
@@ -6720,7 +7098,8 @@ function ScriptSection(props) {
     for (var i = 0; i < prospects.length; i++) { if (prospects[i].id === id) p = prospects[i]; }
     if (!p) return;
     var now = Date.now();
-    var convo = { id: now + "-" + Math.random().toString(36).slice(2, 8), name: p.name, step: "start", created: now, updated: now };
+    var promoteTrack = SCRIPT_META[newScript] ? newScript : SCRIPT_PAYOUT;
+    var convo = { id: now + "-" + Math.random().toString(36).slice(2, 8), name: p.name, step: scriptStartStep(promoteTrack), created: now, updated: now };
     setConvos([convo].concat(convos));
     markDirty(advisor.id, convo.id);
     refreshSyncMeta();
@@ -6738,6 +7117,7 @@ function ScriptSection(props) {
     logEvent("script_convo_started", advisor.code, {
       convo_id: convo.id,
       source: "promoted",
+      script: promoteTrack,
       days_waiting: p.created ? Math.floor((now - p.created) / 86400000) : null
     });
   }
@@ -6926,6 +7306,7 @@ function ScriptSection(props) {
     return h("div", { style: WRAP },
       h(HomeScreen, {
         convos: convos, newName: newName, setNewName: setNewName,
+        newScript: newScript, setNewScript: setNewScript,
         search: search, setSearch: setSearch,
         sortMode: sortMode, setSortMode: setSortMode,
         onStart: startNew, onOpen: openConvo, onRemove: removeConvo,
@@ -6942,7 +7323,7 @@ function ScriptSection(props) {
   }
  
   return h("div", { style: WRAP },
-    h(StepScreen, { convo: active, onGo: goTo, onHome: goBack, onFlash: flash, onTouch: touch }),
+    h(StepScreen, { convo: active, onGo: goTo, onHome: goBack, onFlash: flash, onTouch: touch, onSwitchScript: switchScript }),
     overlays
   );
 }
