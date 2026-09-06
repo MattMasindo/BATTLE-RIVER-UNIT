@@ -1162,6 +1162,13 @@ function NavIcon(props) {
       h("circle", { cx: "18.5", cy: "12", r: "1.3" })
     );
   }
+  if (n === "payment") {
+    return h("svg", common,
+      h("rect", { x: "3.5", y: "6", width: "17", height: "12.5", rx: "2.2" }),
+      h("path", { d: "M3.5 10h17" }),
+      h("path", { d: "M6.5 15h4" })
+    );
+  }
   return h("svg", common,
     h("circle", { cx: "10", cy: "8.2", r: "3.6" }),
     h("path", { d: "M3.6 20c0-3.4 2.9-5.6 6.4-5.6 1.3 0 2.5.3 3.5.9" }),
@@ -4465,6 +4472,7 @@ function SectionTitle(props) {
 //   ?view=team | rewards | more
 //   ?view=manager&advisor=136662  a specific advisor, manager side
 //   ?view=manager&sheet=export
+//   ?view=payment                 enrollment/payment cheat sheet + forms
 //
 // Every link the Script Tool ever emitted still resolves. The daily
 // OneSignal digest sends ?view=overdue and home-screen shortcuts send
@@ -4475,7 +4483,7 @@ function SectionTitle(props) {
 // The hash form (#?view=...) is read as a fallback because some chat
 // clients strip query strings from shared links but keep the fragment.
 // ---------------------------------------------------------------------
-var VIEW_KEYS = ["chats", "names", "today", "team", "rewards", "more", "manager", "recruitment", "scriptedit"];
+var VIEW_KEYS = ["chats", "names", "today", "team", "rewards", "more", "manager", "recruitment", "scriptedit", "payment"];
 var ROUTE_KEYS = ["view", "advisor", "sheet", "lane", "q", "convo", "prospect", "focus"];
  
 function parseRoute() {
@@ -4568,7 +4576,7 @@ function isOneSignalConfigured() {
 }
  
 var APP_NAME = "Unit App";
-var APP_VERSION = "5.9.0-patch13";
+var APP_VERSION = "5.10.0-patch14";
  
 function isSupabaseConfigured() {
   return SUPABASE_URL.indexOf("YOUR-PROJECT") === -1 && SUPABASE_ANON_KEY.indexOf("YOUR-ANON") === -1;
@@ -7306,6 +7314,254 @@ function MoreView(props) {
  
  
 // =====================================================================
+// PaymentView — enrollment/payment cheat sheet + application forms.
+//
+// Replaces "Names" in the bottom tab bar (Patch 14). The Names List
+// feature itself is untouched — it still lives at ?view=names, still
+// reachable from the "Names List" card on Chats and from the quick-add
+// FAB and referral flow, just no longer pinned to a bottom tab.
+//
+// This is reference material Matt already sends client-by-client in
+// Messenger, so it follows the exact same personalize-then-Copy pattern
+// as the chat script (see StepScreen.doCopy above): fill in the shared
+// fields once, every card below merges them in live, Copy sends the
+// filled text to the clipboard. Nothing here syncs to Supabase — it's
+// static content, not per-advisor state — so the only thing persisted
+// is the advisor's own in-progress field values, so switching tabs
+// mid-fill doesn't lose them.
+// =====================================================================
+
+var PAYMENT_FIELDS = [
+  { key: "NAME", label: "Client / payor's full name", placeholder: "Juan Dela Cruz" },
+  { key: "SER", label: "SER / Policy / Subscriber / Account No.", placeholder: "e.g. 0012345678" },
+  { key: "AMOUNT", label: "Amount (Php)", placeholder: "e.g. 5,000" },
+  { key: "EMAIL", label: "Email address", placeholder: "name@email.com" },
+  { key: "NICKNAME", label: "Policy nickname", placeholder: "e.g. Sun Maxilink Bright" }
+];
+
+function fillPayment(text, values) {
+  return text.replace(/\{(\w+)\}/g, function (_, key) {
+    var v = values && values[key];
+    return (v && String(v).trim()) ? String(v).trim() : "_____";
+  });
+}
+
+function paymentFieldsKey(advisorId) { return "br-payment-fields-" + (advisorId || "shared"); }
+
+var PAYMENT_METHODS = [
+  {
+    id: "bdo_enroll",
+    category: "Bank apps",
+    title: "BDO Online — Enroll company biller",
+    body: "HOW TO ENROLL VIA BDO ONLINE:\n1. Open BDO Mobile Banking\n2. Lower right hand press “more”\n3. Choose “enrollment services”\n4. Then “enroll company biller”\n5. Choose “SUN LIFE OF CANADA PHILIPPINES INC.”\n6. Input: Subscriber Number / Policy Number: {SER}\n7. Subscriber Name “{NAME}”\n8. Preferred Nickname “Type of Policy” ex. {NICKNAME}"
+  },
+  {
+    id: "bdo_pay",
+    category: "Bank apps",
+    title: "BDO Savings — Pay bills",
+    body: "HOW TO PAY VIA BDO SAVINGS\n*Once enrollment is successful.\n\n1. Press “pay bills” then “pay from” to choose your savings account\n2. Next, press “Pay this company/biller”\n3. Choose “Sun Life of Canada Philippines Inc”\n4. Type the “amount: Php {AMOUNT} ONLY”\n5. Put your name and policy name for the “remarks”\n6. Then press “continue”\n\nTapos friend pa send sa akin screenshot ng bank transaction para ako na mag attach together with your application 🤗"
+  },
+  {
+    id: "bpi_app",
+    category: "Bank apps",
+    title: "BPI Mobile App — Deposit",
+    body: "HOW TO PAY VIA BPI MOBILE APP — Deposit\n\n1. Open the BPI App\n2. Go to “Pay Bills”\n3. Click “Enter Details Manually” then choose SunLife of Canada (Phils)\n4. Enter the Reference Number / SR Number: {SER}\n5. Click “NEXT” then “DONE”\n6. Confirm OTP via text message"
+  },
+  {
+    id: "bpi_online",
+    category: "Bank apps",
+    title: "BPI Online — Pay bills",
+    body: "HOW TO PAY VIA BPI ONLINE\n\n1. Go to “payments/load”\n2. Choose “pay from” and “pay to” as the enrolled account\n3. Enter amount: Php {AMOUNT} ONLY\n\nTapos friend pa send sa akin dito ng copy ng receipt ha para attach ko na sa forms:) thankyou!"
+  },
+  {
+    id: "unionbank",
+    category: "Bank apps",
+    title: "UnionBank (UB) — Pay bills",
+    body: "HOW TO PAY VIA UNIONBANK (UB)\n\n1. Open UB Mobile App\n2. Go to “Pay Bills” then “Select Biller”\n3. Press “Biller List” then search for “SUN LIFE OF CANADA PHILIPPINES INC”\n4. Payor Name: {NAME}\n5. Policy or App Serial No: {SER}\n6. Next, Choose account to pay\n7. Type in the amount “Php {AMOUNT} ONLY” then press “PAY”\n\nTapos friend pa send sa akin dito ng copy ng receipt ha para attach ko na sa forms:) thankyou!"
+  },
+  {
+    id: "secbank",
+    category: "Bank apps",
+    title: "Security Bank — Pay bills",
+    body: "HOW TO PAY VIA SECURITY BANK\n\n1. Open the Security Bank Online App\n2. Go to “Bills”\n3. Choose biller as “Sun Life of Canada”\n4. Subscriber Number: {SER}\n5. Amount: Php {AMOUNT} ONLY\n\nTapos pahingi ako ng scanned copy ng resibo or clear picture ha. I-attach ko sa forms. Thanks friend!:)"
+  },
+  {
+    id: "bdo_otc",
+    category: "Bank apps",
+    title: "Over-the-counter — BDO deposit",
+    body: "HOW TO PAY OVER-THE-COUNTER DEPOSIT VIA BDO\n\n1. Check bills payment\n2. Company Name: SUN LIFE OF CANADA (PHIL) INC.\n3. Subscriber’s Name: {NAME}\n4. Subscriber Number: {SER}\n5. Amount: Php {AMOUNT} ONLY\n\nTapos pahingi ako ng scanned copy ng resibo or clear picture ha. I-attach ko sa forms. Thanks friend!:)"
+  },
+  {
+    id: "cc_new",
+    category: "Credit card / online link",
+    title: "Credit Card — New policy",
+    body: "HOW TO PAY THRU CREDIT CARD\n\n1. Open link: https://online.sunlife.com.ph/onlinepay/payment\n2. Click “NEW POLICY APPLICATION”\n3. Product Type: TRADITIONAL - PESO or VUL\n4. Input First Name and Last Name: {NAME}\n5. Email address: {EMAIL}\n6. Application Serial Number: {SER}\nTotal Investment Amount: Php {AMOUNT} ONLY\n\nTapos pa send ako dito ng copy ng receipt ha:) Para attach ko na sa forms:) Thankyou!:)"
+  },
+  {
+    id: "cc_renewal",
+    category: "Credit card / online link",
+    title: "Credit Card — Renewal",
+    body: "HOW TO PAY THRU CC (RENEWAL)\n\n1. Open link: https://online.sunlife.com.ph/onlinepay/payment\n2. Click “EXISTING POLICY PREMIUM”\n3. Product Type: TRADITIONAL - PESO or VUL\n4. Input First Name and Last Name: {NAME}\n5. Email address: {EMAIL}\n6. Application Policy Number: {SER}\nTotal Investment Amount: Php {AMOUNT} ONLY\n\nTapos friend pa send sa akin dito ha para submit ko na siya ha:) Thankyou!"
+  },
+  {
+    id: "gcash_link",
+    category: "Credit card / online link",
+    title: "GCash — via Sun Life link (new policy)",
+    body: "HOW TO PAY VIA G CASH USING SUN LIFE LINK\n\nLink: https://online.sunlife.com.ph/onlinepay/payment\n\nProduct Type: VUL-Peso / TRAD\nSelect Product: {NICKNAME}\nFirst Name / Last Name: {NAME}\nEmail address: {EMAIL}\nApplication Serial No: {SER}\n\nTapos pahingi ako ng scanned copy ng resibo or clear picture ha. I-attach ko sa forms. Thanks friend!:)"
+  },
+  {
+    id: "gcash_pay",
+    category: "GCash",
+    title: "GCash — Pay bills",
+    body: "HOW TO PAY VIA G CASH\n\nSubscriber / Account Number: {SER}\n\n1. Open G Cash App\n2. Go to “Pay Bills”\n3. Type in the search bar “Sun Life of Canada Phils”\n4. Type the “amount”: Php {AMOUNT} ONLY\n5. Next, type the “Account Number”: {SER}\n6. Email address for the receipt: {EMAIL}\n\nTapos friend pa send sa akin ng screenshot ha:) Salamuch!"
+  },
+  {
+    id: "gcash_renewal",
+    category: "GCash",
+    title: "GCash — Renewals",
+    body: "HOW TO PAY RENEWALS VIA G CASH\n\n1. Open G Cash App\n2. Go to “Pay Bill”\n3. Choose “Insurance”\n4. Search for “SUN LIFE OF CANADA PHILS”\n5. Account Number: {SER}\n\nTapos pahingi ako copy ng receipt friend ha 😊"
+  }
+];
+
+var PAYMENT_FORMS = [
+  {
+    id: "form_adult",
+    title: "Sun Life fill-out form — Adult",
+    body: "SUN LIFE FILL OUT FORM\n(Kindly use CAPITAL LETTERS only)\n\nPERSONAL DETAILS:\nComplete name:\nGender:\nBirthday:\nCurrent Age:\nCivil Status:\nBirthplace:\nPermanent Address with Zip code (If OFW or living abroad):\nPresent Address with Zip code:\nEmail Address:\nMobile no.:\nTIN no.\nSSS no.\nPrimary Occupation:\nNature of Work:\nEstimated Annual Income:\nEmployer name:\nEmployer address:\nTotal Yrs in the company:\nNature of Business or Industry:\n\nBENEFICIARY/IES: (max of 3 for primary)\nComplete name:\nSex at birth:\nAddress:\nRelationship:\nBirthday:\nBirthplace:\nCitizenship:\nContact #:\n\nDo you have other life insurance (individual not company issued)? Yes or No? :\n\nIf Yes, give details: (Insurance Company, Year Issued, Total Coverage, Riders)\n\nMEDICAL QUESTIONS:\nPresent Height:\nPresent Weight:\nLast Check up/ Where & When:\nReason for visit:\nResults:\n\nWere you tested positive for COVID-19?\nIf yes, When? :\n\nAny health concerns that you have been given by your doctor medication for?\n\nFAMILY HISTORY :\nFather\nAge\nHealth Condition:\nAge died, if deceased:\nReason of death, if deceased:\n\nMother\nAge\nHealth Condition:\nAge died, if deceased:\nReason of death, if deceased:\n\nBrother/s\nAge\nHealth Condition:\nAge died, if deceased:\nReason of death, if deceased:\n\nSister/s\nAge\nHealth Condition:\nAge died, if deceased:\nReason of death, if deceased:\n\nIf OFW:\nSpecify Country:\nDuration of Travel:\nReason for Travel:\n\n---\nKindly send copy of your valid ID, Selfie holding your valid ID, Proof of Payment and Medical Results, if necessary."
+  },
+  {
+    id: "form_minor",
+    title: "Sun Life fill-out form — Minor",
+    body: "SUN LIFE APPLICATION\n(Kindly use CAPITAL LETTERS only)\n\nPERSONAL DETAILS:\nComplete name:\nSex at Birth:\nBirthday:\nCurrent Age:\nCivil Status:\nBirthplace:\nPermanent Address with Zip code (If OFW or living abroad):\nPresent Address with Zip code:\n\nMEDICAL QUESTIONS\nCurrent height and weight:\nBirthweight:\n\nLast Check Up/Where and When:\nReason:\nResults:\n\nFAMILY HISTORY:\nFather\nAge\nHealth Condition\n\nMother\nAge\nHealth Condition\n\nSister/s\nAge\nHealth Condition\n\nBrother/s\nAge\nHealth Condition"
+  }
+];
+
+var PAYMENT_CATEGORIES = ["Bank apps", "Credit card / online link", "GCash"];
+
+function PaymentCard(props) {
+  var item = props.item, isOpen = props.isOpen, isCopied = props.isCopied;
+  return h("div", {
+    key: item.id,
+    style: { background: COLORS.card, borderColor: isCopied ? COLORS.brass : COLORS.line },
+    className: "rounded-2xl border overflow-hidden mb-2.5"
+  },
+    h("button", {
+      type: "button",
+      onClick: props.onToggle,
+      className: "w-full text-left px-4 py-3.5 flex items-center justify-between gap-3 active:opacity-80"
+    },
+      h("span", { style: { color: COLORS.ink }, className: "text-[15px] font-semibold" }, item.title),
+      h("span", { style: { color: COLORS.slate }, className: "shrink-0" }, isOpen ? "︿" : "›")
+    ),
+    isOpen && h("div", { className: "px-4 pb-4" },
+      h("div", {
+        style: { whiteSpace: "pre-line", color: COLORS.ink, background: "#202839", borderColor: COLORS.line },
+        className: "text-[13.5px] leading-relaxed mb-3.5 p-3.5 rounded-xl border"
+      }, props.filled),
+      h("button", {
+        onClick: props.onCopy,
+        style: { background: isCopied ? COLORS.good : COLORS.brass, color: isCopied ? "#fff" : COLORS.parchment },
+        className: "w-full py-3 rounded-xl font-bold text-[14px] active:scale-[0.98] transition-transform"
+      }, isCopied ? "✓ Copied" : "Copy")
+    )
+  );
+}
+
+function PaymentView(props) {
+  var advisorId = props.advisorId;
+  var fieldsState = useState(function () { return lget(paymentFieldsKey(advisorId), {}); });
+  var fields = fieldsState[0], setFields = fieldsState[1];
+  var openState = useState(null); var openId = openState[0], setOpenId = openState[1];
+  var copiedState = useState(null); var copiedId = copiedState[0], setCopiedId = copiedState[1];
+  var toastState = useState(null); var toast = toastState[0], setToast = toastState[1];
+
+  useEffect(function () { lset(paymentFieldsKey(advisorId), fields); }, [fields, advisorId]);
+
+  function flash(msg) {
+    setToast({ msg: msg, id: Date.now() });
+    setTimeout(function () { setToast(null); }, 1600);
+  }
+
+  function setField(key, val) {
+    setFields(function (f) { var next = Object.assign({}, f); next[key] = val; return next; });
+  }
+
+  function doCopy(item) {
+    var out = fillPayment(item.body, fields);
+    copyText(out, function (ok) {
+      if (ok) {
+        setCopiedId(item.id);
+        setTimeout(function () { setCopiedId(null); }, 1800);
+        flash("Copied — paste sa Messenger");
+      } else {
+        flash("Couldn't copy — long-press the text instead");
+      }
+    });
+  }
+
+  function card(item) {
+    return h(PaymentCard, {
+      key: item.id,
+      item: item,
+      isOpen: openId === item.id,
+      isCopied: copiedId === item.id,
+      filled: fillPayment(item.body, fields),
+      onToggle: function () { setOpenId(openId === item.id ? null : item.id); },
+      onCopy: function () { doCopy(item); }
+    });
+  }
+
+  var toastEl = toast ? h("div", {
+    key: toast.id,
+    className: "flash fixed left-0 right-0 flex justify-center z-50",
+    style: { bottom: "28px", pointerEvents: "none" }
+  }, h("div", {
+    style: { background: COLORS.brass, color: COLORS.parchment },
+    className: "px-5 py-2.5 rounded-full text-sm font-semibold shadow-lg"
+  }, toast.msg)) : null;
+
+  return h("div", { className: "px-4 pt-5 pb-10" },
+
+    h("div", { style: { color: COLORS.slate }, className: "text-[11px] font-mono uppercase tracking-widest mb-2.5" },
+      "Fill in once — applies to every method below"),
+    h("div", { style: { background: COLORS.card, borderColor: COLORS.line }, className: "rounded-2xl border p-4 mb-6 space-y-2.5" },
+      PAYMENT_FIELDS.map(function (f) {
+        return h("div", { key: f.key },
+          h("label", { style: { color: COLORS.slate }, className: "block text-[11px] font-mono uppercase tracking-wide mb-1" }, f.label),
+          h("input", {
+            value: fields[f.key] || "",
+            onChange: function (ev) { setField(f.key, ev.target.value); },
+            placeholder: f.placeholder,
+            style: { background: COLORS.parchment, borderColor: COLORS.line, color: COLORS.ink },
+            className: "w-full px-3.5 py-2.5 rounded-xl border outline-none text-[14px]"
+          })
+        );
+      })
+    ),
+
+    PAYMENT_CATEGORIES.map(function (cat) {
+      var items = PAYMENT_METHODS.filter(function (m) { return m.category === cat; });
+      if (!items.length) return null;
+      return h("div", { key: cat, className: "mb-6" },
+        h("div", { style: { color: COLORS.slate }, className: "text-[11px] font-mono uppercase tracking-widest mb-2.5" }, cat),
+        items.map(card)
+      );
+    }),
+
+    h("div", { className: "mb-2" },
+      h("div", { style: { color: COLORS.slate }, className: "text-[11px] font-mono uppercase tracking-widest mb-2.5" }, "Forms"),
+      PAYMENT_FORMS.map(card)
+    ),
+
+    h("div", { style: { color: COLORS.slate }, className: "text-[11px] leading-relaxed mt-5 px-1" },
+      "Fields above are stored only on this device — nothing here backs up to the cloud."),
+
+    toastEl
+  );
+}
+
+
+// =====================================================================
 // ScriptSection — the chat-selling script half of the app.
 //
 // Pre-merge this was App(): it owned its own identity picker, approval
@@ -9248,7 +9504,7 @@ function App() {
   // moves to More alongside Manager tools, Recruitment and backups.
   var navTabs = [
     { key: "chats", label: "Chats", icon: "chats", badge: overdueCount },
-    { key: "names", label: "Names", icon: "names" },
+    { key: "payment", label: "Payment", icon: "payment" },
     { key: "today", label: "Today", icon: "today" },
     { key: "rewards", label: "Rewards", icon: "rewards" },
     { key: "more", label: "More", icon: "more" }
@@ -9281,6 +9537,7 @@ function App() {
       : view === "recruitment" ? "Recruitment"
       : view === "chats" ? "Chat script"
       : view === "names" ? "Names list"
+      : view === "payment" ? "Payment"
       : view === "more" ? "More"
       : myIdentity.name;
     var viewEyebrow = view === "manager" ? "Battle River \u00b7 Team"
@@ -9360,6 +9617,10 @@ function App() {
         onManagerTools: function () { setShowManagerGate(true); },
         onAccount: function () { navigate({ sheet: "account" }, true); },
         overdueCount: overdueCount
+      }),
+
+      view === "payment" && h(PaymentView, {
+        advisorId: myIdentity && myIdentity.id
       }),
  
       isAdvisorTab && h(AdvisorView, {
