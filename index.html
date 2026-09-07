@@ -2969,10 +2969,28 @@ function AdvisorView(props) {
 
 var ONEPAGER_TITLES = ["Mr", "Ms", "Mrs", "Atty", "Dr"];
 
+// Quick-add chips for Sun Maxilink Prime's five common riders — tapping one
+// drops a pre-named row into the same freeform rider editor every other
+// mode uses, so the advisor never has to type these exact names out.
+var MAXILINK_RIDER_PRESETS = [
+  "Total Disability Benefit (TDB)",
+  "Waiver of Premium upon Death or Disability of Initial Owner (WPDD)",
+  "Hospital Income Benefit",
+  "Accidental Death Benefit (ADB)",
+  "Accidental Death, Dismemberment and Disablement (ADDD)"
+];
+
+// Patch 16: Maxilink leads the switcher now that it has its own dedicated
+// template — the old catch-all grid mode is relabeled "Easylink" since
+// "Maxilink" no longer needs to share a slot with it.
 var ONEPAGER_MODE_META = {
+  maxilink: {
+    label: "Maxilink",
+    hint: "Sun Maxilink Prime \u2014 pay period 5, 10, or Regular Pay. Life Insurance Coverage (2\u00d7 Face Amount) computes automatically; Projected Investment Fund figures are typed in straight from the plan's own proposal."
+  },
   grid: {
-    label: "Maxilink / Easylink",
-    hint: "Column-grid format \u2014 Sun Maxilink Prime, Sun Maxilink Bright, Sun Easylink."
+    label: "Easylink",
+    hint: "Column-grid format \u2014 flexible free-text table for Sun Easylink, Sun Maxilink Bright, or anything without its own dedicated template yet."
   },
   list: {
     label: "Secure Income",
@@ -2986,9 +3004,16 @@ var ONEPAGER_MODE_META = {
 
 function opDefaultModes() {
   return {
+    maxilink: {
+      years: "10", ownerTitle: "", ownerName: "", insuredTitle: "Ms", insuredName: "Ella Marie Bautista",
+      dob: "", gender: "", faceAmount: "1000000", yearlyInvestment: "60000",
+      showSemiAnnual: true, showQuarterly: true,
+      riders: [{ name: "Total Disability Benefit (TDB)", value: "Waiver of Premium" }],
+      fund10: "", fund15: "", fund20: ""
+    },
     grid: {
       clientName: "MS. CLAIRENE JEWELL C. DELA CRUZ",
-      productName: "SUN MAXILINK PRIME",
+      productName: "SUN EASYLINK",
       cols: [
         { h: "LIFE INSURANCE (due to sickness / old age)", v: "700K" },
         { h: "TOTAL DISABILITY BENEFIT", v: "24,000/ yr. and Waiver of Premium" },
@@ -3164,6 +3189,95 @@ function OnePagerGridFields(props) {
   );
 }
 
+// Sun Maxilink Prime's own field set. Kept separate from
+// OnePagerPolicyFields (Secure Income / Fit & Well) rather than adding a
+// third mode branch there — the shapes have diverged enough (no
+// compounding-rate field, a rider quick-add row, three manual fund-value
+// fields with an auto-computed age hint) that a shared function was
+// starting to read as more conditionals than content.
+function OnePagerMaxilinkFields(props) {
+  var s = props.s, setField = props.setField;
+  var faceNum = parseFloat(s.faceAmount) || 0;
+  var titleOptions = [{ value: "", label: "\u2014" }].concat(ONEPAGER_TITLES.map(function (t) { return { value: t, label: t + "." }; }));
+  var genderOptions = [{ value: "", label: "\u2014 select \u2014" }, { value: "Male", label: "Male" }, { value: "Female", label: "Female" }];
+  var age = opCalcAge(s.dob);
+
+  return h("div", null,
+    h("div", { style: { color: COLORS.slate }, className: "text-[11px] font-mono uppercase tracking-wide mb-1.5" }, "Policy"),
+    h("div", { style: { color: COLORS.slate }, className: "text-[11px] mb-1.5" }, "Pay period"),
+    h(OnePagerYearPicker, { years: ["5", "10", "Regular Pay"], value: s.years, onChange: function (v) { setField("years", v); } }),
+
+    h("div", { style: { color: COLORS.slate }, className: "text-[11px] font-mono uppercase tracking-wide mb-1.5 mt-4" }, "People"),
+    h("div", { style: { color: COLORS.slate }, className: "text-[11px] mb-1.5" }, "Owner's name"),
+    h("div", { className: "flex gap-2 mb-3" },
+      h(OnePagerSelect, { value: s.ownerTitle, onChange: function (v) { setField("ownerTitle", v); }, options: titleOptions }),
+      h("input", {
+        type: "text", value: s.ownerName, onChange: function (ev) { setField("ownerName", ev.target.value); },
+        placeholder: "Owner's full name",
+        style: { background: COLORS.parchment, borderColor: COLORS.line, color: COLORS.ink },
+        className: "flex-1 px-3 py-2.5 rounded-xl border outline-none text-sm"
+      })
+    ),
+    h("div", { style: { color: COLORS.slate }, className: "text-[11px] mb-1.5" }, "Insured's name (type \u201Csame\u201D to copy the Owner)"),
+    h("div", { className: "flex gap-2 mb-3" },
+      h(OnePagerSelect, { value: s.insuredTitle, onChange: function (v) { setField("insuredTitle", v); }, options: titleOptions }),
+      h("input", {
+        type: "text", value: s.insuredName, onChange: function (ev) { setField("insuredName", ev.target.value); },
+        placeholder: "Insured's full name, or 'same'",
+        style: { background: COLORS.parchment, borderColor: COLORS.line, color: COLORS.ink },
+        className: "flex-1 px-3 py-2.5 rounded-xl border outline-none text-sm"
+      })
+    ),
+    h(OnePagerField, { label: "Date of birth", type: "date", value: s.dob, onChange: function (v) { setField("dob", v); } }),
+    h("div", { className: "mb-3" },
+      h("div", { style: { color: COLORS.slate }, className: "text-[11px] font-mono uppercase tracking-wide mb-1.5" }, "Gender"),
+      h(OnePagerSelect, { value: s.gender, onChange: function (v) { setField("gender", v); }, options: genderOptions })
+    ),
+
+    h("div", { style: { color: COLORS.slate }, className: "text-[11px] font-mono uppercase tracking-wide mb-1.5 mt-4" }, "Amounts"),
+    h(OnePagerField, { label: "Face amount (PHP)", type: "number", value: s.faceAmount, onChange: function (v) { setField("faceAmount", v); } }),
+    h(OnePagerField, { label: "Yearly investment amount \u2014 discounted rate (PHP)", type: "number", value: s.yearlyInvestment, onChange: function (v) { setField("yearlyInvestment", v); } }),
+    h(OnePagerCheckboxField, { label: "Show semi-annual", checked: s.showSemiAnnual, onChange: function (v) { setField("showSemiAnnual", v); } }),
+    h(OnePagerCheckboxField, { label: "Show quarterly", checked: s.showQuarterly, onChange: function (v) { setField("showQuarterly", v); } }),
+
+    h(OnePagerComputedNote, {
+      lines: [{ label: "Life Insurance Coverage (2\u00d7 Face Amount)", value: opPeso(faceNum * 2) }]
+    }),
+
+    h("div", { style: { color: COLORS.slate }, className: "text-[11px] font-mono uppercase tracking-wide mb-1.5 mt-4" }, "Riders (" + s.riders.length + ")"),
+    h("div", { className: "flex flex-wrap gap-1.5 mb-2.5" },
+      MAXILINK_RIDER_PRESETS.map(function (name) {
+        return h("button", {
+          key: name, type: "button",
+          onClick: function () { props.addArrItem("riders", { name: name, value: "" }); },
+          style: { borderColor: COLORS.line, color: COLORS.brass, background: "rgba(242,183,5,0.08)" },
+          className: "px-2.5 py-1.5 rounded-lg border text-[11px] font-semibold active:scale-95 transition-transform"
+        }, "+ " + name);
+      })
+    ),
+    h(OnePagerRowEditor, {
+      items: s.riders,
+      keys: [{ key: "name", placeholder: "Rider / benefit name" }, { key: "value", placeholder: "Value" }],
+      onChangeItem: function (i, k, v) { props.setArrItem("riders", i, k, v); },
+      onRemove: function (i) { props.removeArrItem("riders", i); },
+      onAdd: function () { props.addArrItem("riders", { name: "New rider / benefit", value: "" }); },
+      addLabel: "+ Add rider / benefit"
+    }),
+
+    h("div", { style: { color: COLORS.slate }, className: "text-[11px] font-mono uppercase tracking-wide mb-1.5 mt-4" }, "Projected Investment Fund (non-guaranteed, @ 4%)"),
+    h("div", { style: { color: COLORS.slate }, className: "text-[11px] leading-relaxed mb-2" }, "Taken straight from the plan's own proposal/illustration \u2014 type the figures in. The age shown updates automatically from Date of Birth."),
+    [10, 15, 20].map(function (yrs) {
+      var key = "fund" + yrs;
+      var atAge = age !== null ? age + yrs : null;
+      return h(OnePagerField, {
+        key: key,
+        label: "After " + yrs + " years (PHP)" + (atAge !== null ? " \u2014 insured will be age " + atAge : ""),
+        type: "number", value: s[key], onChange: function (v) { setField(key, v); }
+      });
+    })
+  );
+}
+
 // Shared by both "list" (Secure Income) and "desc" (Fit & Well) — same
 // Policy / People / Amounts / Riders shape, just different pay-period
 // options, computed-note math, and a couple of list-only trailing fields.
@@ -3281,6 +3395,87 @@ function OnePagerGridStage(props) {
       )
     ),
     preparedBy && preparedBy.trim() && h("div", { className: "op-footer" }, "Prepared by: " + preparedBy.trim())
+  );
+}
+
+// Same header-band / hero / section-row visual language as Secure Income
+// and Fit & Well — the one true computed figure (Life Insurance Coverage)
+// takes the hero slot; the three fund-projection rows only render once the
+// advisor has actually typed a figure in, so an untouched field doesn't
+// show up on the document as "PHP 0".
+function OnePagerMaxilinkStage(props) {
+  var s = props.s, preparedBy = props.preparedBy;
+  var faceAmount = parseFloat(s.faceAmount) || 0;
+  var yearly = parseFloat(s.yearlyInvestment) || 0;
+  var lifeCoverage = faceAmount * 2;
+  var age = opCalcAge(s.dob);
+  var insured = opResolveInsured(s);
+  var owner = opTitledName(s.ownerTitle, s.ownerName);
+  var metaBits = opMetaBits(s);
+  var freqBits = [];
+  if (s.showSemiAnnual) freqBits.push(opPeso(yearly / 2) + " ONLY semi-annually");
+  if (s.showQuarterly) freqBits.push(opPeso(yearly / 4) + " ONLY quarterly");
+  var payPill = s.years === "Regular Pay" ? "REGULAR PAY" : (s.years + "-PAY");
+  var fundYears = [10, 15, 20].filter(function (yrs) { return (s["fund" + yrs] || "").toString().trim() !== ""; });
+
+  return h(React.Fragment, null,
+    h(OnePagerHeaderBand, null),
+    h("div", { className: "op-body-pad" },
+      h("div", { className: "op-title-row" },
+        h("span", { className: "op-doc-title" }, "Sun Maxilink Prime"),
+        h("span", { className: "op-doc-pill" }, payPill)
+      ),
+      h("div", { className: "op-doc-sub" }, "Summary of Benefits on the Life of: ", h("strong", null, insured)),
+      owner && owner !== insured && h("div", { className: "op-doc-sub" }, "Owner: ", h("strong", null, owner)),
+      metaBits.length > 0 && h("div", { className: "op-doc-meta" }, metaBits.join("   \u00B7   ")),
+
+      h("div", { className: "op-hero" },
+        h("div", { className: "op-hero-label" }, "Life Insurance Coverage"),
+        h("div", { className: "op-hero-amount" }, opPeso(lifeCoverage)),
+        h("div", { className: "op-hero-caption" }, "2\u00d7 the Face Amount, payable to your beneficiaries for as long as the plan is in force \u2014 regardless of cause of death, apart from the standard exclusions.")
+      ),
+
+      h("div", { className: "op-section-title" }, "Your Investment"),
+      h("div", { className: "op-section-rows" },
+        h("div", { className: "op-row" },
+          h("span", { className: "op-lbl" }, "Yearly Investment Amount (discounted rate)"),
+          h("span", { className: "op-val" }, opPeso(yearly) + " ONLY", freqBits.length > 0 && h("span", { className: "op-sub" }, "or " + freqBits.join(" \u00B7 ")))
+        ),
+        h("div", { className: "op-row" },
+          h("span", { className: "op-lbl" }, "Face Amount"),
+          h("span", { className: "op-val" }, opPeso(faceAmount))
+        )
+      ),
+
+      s.riders.length > 0 && h("div", null,
+        h("div", { className: "op-section-title" }, "Riders & Additional Benefits"),
+        h("div", { className: "op-section-rows" },
+          s.riders.map(function (r, i) {
+            return h("div", { className: "op-row", key: "rider" + i },
+              h("span", { className: "op-lbl" }, r.name),
+              h("span", { className: "op-val" }, r.value)
+            );
+          })
+        )
+      ),
+
+      fundYears.length > 0 && h("div", null,
+        h("div", { className: "op-section-title" }, "Projected Investment Fund"),
+        h("div", { style: { fontSize: "11px", color: "rgba(11,39,64,.5)", marginTop: "-2px", marginBottom: "6px" } },
+          "Non-guaranteed, for illustration purposes only \u2014 at an assumed 4% rate."),
+        h("div", { className: "op-section-rows" },
+          fundYears.map(function (yrs) {
+            var atAge = age !== null ? age + yrs : null;
+            return h("div", { className: "op-row", key: "fund" + yrs },
+              h("span", { className: "op-lbl" }, "After " + yrs + " years" + (atAge !== null ? " (age " + atAge + ")" : "")),
+              h("span", { className: "op-val" }, opPeso(parseFloat(s["fund" + yrs]) || 0))
+            );
+          })
+        )
+      ),
+
+      preparedBy && preparedBy.trim() && h("div", { className: "op-footer2" }, h("div", { className: "op-prep" }, "Prepared by: " + preparedBy.trim()))
+    )
   );
 }
 
@@ -3463,6 +3658,7 @@ function OnePagerDescStage(props) {
 function OnePagerStage(props) {
   if (props.mode === "list") return h(OnePagerListStage, props);
   if (props.mode === "desc") return h(OnePagerDescStage, props);
+  if (props.mode === "maxilink") return h(OnePagerMaxilinkStage, props);
   return h(OnePagerGridStage, props);
 }
 
@@ -3470,7 +3666,7 @@ function OnePagerStage(props) {
 
 function OnePagerView(props) {
   var advisor = props.advisor, onBump = props.onBump;
-  var modeState = useState("grid"); var mode = modeState[0], setMode = modeState[1];
+  var modeState = useState("maxilink"); var mode = modeState[0], setMode = modeState[1];
   var dataState = useState(opDefaultModes); var modes = dataState[0], setModes = dataState[1];
   var formatState = useState("png"); var format = formatState[0], setFormat = formatState[1];
   // Prefills from the signed-in advisor, same intent as every other
@@ -3533,6 +3729,7 @@ function OnePagerView(props) {
   function currentProductSlug() {
     if (mode === "list") return "secure-income-" + s.years + "pay";
     if (mode === "desc") return "fit-and-well-" + s.years + "pay";
+    if (mode === "maxilink") return "maxilink-" + (s.years === "Regular Pay" ? "regular-pay" : s.years + "pay");
     return slugify(s.productName);
   }
 
@@ -3596,6 +3793,7 @@ function OnePagerView(props) {
     h("div", { style: { background: COLORS.card, borderColor: COLORS.line }, className: "rounded-2xl border p-4 mb-5" },
       h(OnePagerField, { label: "Prepared by", value: preparedBy, onChange: setPreparedBy, placeholder: "Advisor name" }),
       mode === "grid" && h(OnePagerGridFields, { s: s, setField: setField, setArrItem: setArrItem, addArrItem: addArrItem, removeArrItem: removeArrItem }),
+      mode === "maxilink" && h(OnePagerMaxilinkFields, { s: s, setField: setField, setArrItem: setArrItem, addArrItem: addArrItem, removeArrItem: removeArrItem }),
       (mode === "list" || mode === "desc") && h(OnePagerPolicyFields, { mode: mode, s: s, setField: setField, setArrItem: setArrItem, addArrItem: addArrItem, removeArrItem: removeArrItem })
     ),
 
@@ -3603,7 +3801,7 @@ function OnePagerView(props) {
     h("div", { className: "mb-5 rounded-2xl", style: { overflowX: "auto", background: COLORS.line, padding: "14px" } },
       h("div", {
         ref: stageRef,
-        className: "bru-onepager" + ((mode === "list" || mode === "desc") ? " op-brudoc" : ""),
+        className: "bru-onepager" + ((mode === "list" || mode === "desc" || mode === "maxilink") ? " op-brudoc" : ""),
         style: { margin: "0 auto" }
       },
         h(OnePagerStage, { mode: mode, s: s, preparedBy: preparedBy })
@@ -5333,7 +5531,7 @@ function isOneSignalConfigured() {
 }
  
 var APP_NAME = "Unit App";
-var APP_VERSION = "5.11.0-patch15";
+var APP_VERSION = "5.12.0-patch16";
  
 function isSupabaseConfigured() {
   return SUPABASE_URL.indexOf("YOUR-PROJECT") === -1 && SUPABASE_ANON_KEY.indexOf("YOUR-ANON") === -1;
