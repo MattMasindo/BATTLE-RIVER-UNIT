@@ -31,6 +31,12 @@
      at the site root. Loading the SDK does NOT prompt for permission —
      see rule 13: the prompt is raised only from the digest toggle. -->
 <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+<!-- Patch 15: html2canvas rasterizes the One-Pager Generator's preview
+     DOM node into a downloadable PNG/JPEG. Loaded from CDN like every
+     other library above rather than embedded inline, to keep this file's
+     diff small — OnePagerView checks window.html2canvas before use and
+     fails soft with a toast if the script hasn't loaded yet. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
 <style>
   /* ---- Typography: one cross-platform system stack ---------------------
      --font-ui is the stack specified for the app. --font-mono keeps the
@@ -103,6 +109,60 @@
     .skel, .spin, .bar-indeterminate, .sheet-in, .fade-in, .pop, .flash,
     .rise, .sparkle { animation: none !important; }
   }
+
+  /* ---- Patch 15: One-Pager Generator preview document -------------------
+     Scoped under .bru-onepager so nothing here leaks into the rest of the
+     app's dark theme. This is the client-facing deliverable itself, so it
+     stays a fixed light document design regardless of app theme — ported
+     as-is from the standalone generator prototype. html2canvas rasterizes
+     exactly this subtree, so these rules must stay real CSS (not just
+     Tailwind utility classes) for the exported image to match the screen. */
+  .bru-onepager {
+    width: 1000px; background: #FFFFFF; color: #17130A;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    border: 1px solid #E2E2E2; padding: 26px 30px 30px;
+  }
+  .bru-onepager .op-title1 { font-size: 15px; font-weight: 700; text-align: center; margin-bottom: 10px; }
+  .bru-onepager .op-banner {
+    background: #F2B705; color: #17130A; text-align: center; font-weight: 700;
+    font-size: 13px; letter-spacing: 0.02em; padding: 7px 4px;
+  }
+  .bru-onepager table.op-grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .bru-onepager table.op-grid th, .bru-onepager table.op-grid td {
+    border: 1px solid #E2E2E2; padding: 10px 8px; text-align: center; vertical-align: middle;
+  }
+  .bru-onepager table.op-grid th { background: #FFFFFF; font-size: 10.5px; font-weight: 700; line-height: 1.3; }
+  .bru-onepager table.op-grid td { background: #FFF8E8; font-size: 14px; font-weight: 700; line-height: 1.35; }
+
+  /* Bold navy document design, shared by Secure Income & Fit/Well. */
+  .bru-onepager.op-brudoc { padding: 0; border-radius: 10px; overflow: hidden; }
+  .bru-onepager .op-header-band { background: #0B2740; padding: 18px 32px; display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+  .bru-onepager .op-header-brand { display: flex; align-items: center; gap: 14px; }
+  .bru-onepager .op-header-brand .op-word { font-weight: 800; font-size: 17px; color: #FFFFFF; letter-spacing: -0.01em; }
+  .bru-onepager .op-header-brand .op-tag { font-weight: 500; font-size: 10.5px; letter-spacing: .07em; color: rgba(255,255,255,.65); margin-top: 3px; }
+  .bru-onepager .op-header-date { font-weight: 500; font-size: 12.5px; color: rgba(255,255,255,.65); }
+  .bru-onepager .op-body-pad { padding: 26px 34px 24px; }
+  .bru-onepager .op-title-row { display: flex; align-items: center; gap: 12px; margin-bottom: 9px; flex-wrap: wrap; }
+  .bru-onepager .op-doc-title { font-weight: 800; font-size: 27px; color: #0B2740; letter-spacing: -0.01em; }
+  .bru-onepager .op-doc-pill { background: #F2B705; color: #0B2740; font-weight: 700; font-size: 13px; padding: 5px 14px; border-radius: 999px; }
+  .bru-onepager .op-doc-sub { font-size: 15px; color: #0B2740; margin-bottom: 4px; }
+  .bru-onepager .op-doc-sub strong { font-weight: 700; }
+  .bru-onepager .op-doc-meta { font-size: 13px; color: rgba(11,39,64,.55); margin-bottom: 16px; }
+  .bru-onepager .op-hero { background: #0B2740; border-radius: 12px; padding: 20px 26px; margin-bottom: 20px; text-align: center; }
+  .bru-onepager .op-hero-label { font-weight: 700; font-size: 14px; letter-spacing: .02em; color: rgba(255,255,255,.75); margin-bottom: 6px; }
+  .bru-onepager .op-hero-amount { font-weight: 800; font-size: 54px; color: #F2B705; line-height: 1; margin-bottom: 10px; letter-spacing: -0.01em; }
+  .bru-onepager .op-hero-amount-note { font-weight: 700; font-size: 18px; color: rgba(255,255,255,.7); margin-left: 4px; }
+  .bru-onepager .op-hero-caption { font-size: 14px; color: rgba(255,255,255,.85); line-height: 1.5; max-width: 600px; margin: 0 auto; }
+  .bru-onepager .op-section-title { font-weight: 700; font-size: 15px; color: #0B2740; margin: 18px 0 6px; padding-left: 12px; border-left: 4px solid #F2B705; }
+  .bru-onepager .op-section-title:first-of-type { margin-top: 0; }
+  .bru-onepager .op-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 22px; padding: 11px 2px; border-bottom: 1px solid rgba(11,39,64,.10); }
+  .bru-onepager .op-section-rows .op-row:last-child { border-bottom: none; }
+  .bru-onepager .op-row .op-lbl { font-size: 14.5px; font-weight: 500; color: #0B2740; }
+  .bru-onepager .op-row .op-val { font-size: 15.5px; font-weight: 700; color: #0B2740; text-align: right; }
+  .bru-onepager .op-row .op-val .op-sub { display: block; font-weight: 500; font-size: 12px; color: rgba(11,39,64,.55); margin-top: 2px; }
+  .bru-onepager .op-footer { margin-top: 18px; padding-top: 12px; border-top: 1px solid rgba(11,39,64,.12); text-align: right; font-size: 11px; color: #8A8A8A; }
+  .bru-onepager .op-footer2 { margin-top: 18px; padding-top: 12px; border-top: 1px solid rgba(11,39,64,.12); text-align: right; }
+  .bru-onepager .op-footer2 .op-prep { font-size: 12.5px; color: rgba(11,39,64,.55); }
 </style>
 </head>
 <body>
@@ -1125,6 +1185,18 @@ function NavIcon(props) {
       h("rect", { x: "3.5", y: "4.5", width: "17", height: "16", rx: "3" }),
       h("path", { d: "M8 2.8v3.4M16 2.8v3.4M3.5 9.5h17" }),
       h("path", { d: "M9 14.4l2 2 4-4" })
+    );
+  }
+  // Patch 15: the Today tab now opens the One-Pager Generator, so its icon
+  // reads as a document rather than a calendar check. The "today" icon
+  // above is kept as-is (unused by the bottom nav now, still valid for any
+  // caller that references it directly) rather than repurposed in place.
+  if (n === "onepager") {
+    return h("svg", common,
+      h("path", { d: "M7 3.5h7.5L18 7v13a1 1 0 01-1 1H7a1 1 0 01-1-1v-15.5a1 1 0 011-1z" }),
+      h("path", { d: "M14.5 3.5V7H18" }),
+      h("circle", { cx: "10.3", cy: "11.6", r: "1.1" }),
+      h("path", { d: "M8.5 16.3l1.9-2.1 1.5 1.5 2.3-2.7 2.3 3.3" })
     );
   }
   if (n === "team") {
@@ -2879,6 +2951,686 @@ function AdvisorView(props) {
   );
 }
  
+// =====================================================================
+// OnePagerView — client-facing proposal one-pager generator (Patch 15).
+// Lives at the "Today" tab. Three modes mirror the reference workbook:
+//   grid  — Maxilink / Easylink column-grid summary
+//   list  — Sun Secure Income guaranteed-payout summary
+//   desc  — Sun Fit and Well Advantage summary
+// State is fully editable; the benefit math for list/desc is derived
+// from Face Amount exactly as the standalone prototype computed it.
+// Downloading a one-pager reuses downloadBlob() (Web Share API first,
+// classic <a download> fallback — the same path Settings' JSON/CSV
+// export already uses) and bumps "presented" (Clients Presented)
+// through the existing bump_metric() RPC every other manual METRICS
+// entry goes through, so a prepared proposal counts on the
+// leaderboard/funnel the same way it would if logged by hand.
+// =====================================================================
+
+var ONEPAGER_TITLES = ["Mr", "Ms", "Mrs", "Atty", "Dr"];
+
+var ONEPAGER_MODE_META = {
+  grid: {
+    label: "Maxilink / Easylink",
+    hint: "Column-grid format \u2014 Sun Maxilink Prime, Sun Maxilink Bright, Sun Easylink."
+  },
+  list: {
+    label: "Secure Income",
+    hint: "Sun Secure Income \u2014 pay period 2, 5, 10, or 15 years. Guaranteed payout, lifetime coverage, and centennial bonus compute automatically from the Face Amount \u2014 you never type those in."
+  },
+  desc: {
+    label: "Fit & Well Advantage",
+    hint: "Sun Fit and Well Advantage \u2014 pay period 10, 15, or 20 years. Illness benefits, hospital income, and home recovery compute automatically from the Face Amount."
+  }
+};
+
+function opDefaultModes() {
+  return {
+    grid: {
+      clientName: "MS. CLAIRENE JEWELL C. DELA CRUZ",
+      productName: "SUN MAXILINK PRIME",
+      cols: [
+        { h: "LIFE INSURANCE (due to sickness / old age)", v: "700K" },
+        { h: "TOTAL DISABILITY BENEFIT", v: "24,000/ yr. and Waiver of Premium" },
+        { h: "36 CRITICAL ILLNESSES", v: "350,000" },
+        { h: "ACCIDENTAL DEATH BENEFIT", v: "350,000" },
+        { h: "HOSPITAL INCOME BENEFIT", v: "1000 / day" },
+        { h: "QUARTERLY", v: "PHP 6,000" },
+        { h: "INVESTMENT FUND @10% AFTER 10 YRS.", v: "253,702" },
+        { h: "INVESTMENT FUND @10% AFTER 20 YRS.", v: "652,820" },
+        { h: "INVESTMENT FUND @10% AGE 65", v: "4,369,788" }
+      ]
+    },
+    list: {
+      years: "15", ownerTitle: "", ownerName: "", insuredTitle: "Ms", insuredName: "Ulma Paat",
+      dob: "", gender: "", faceAmount: "500000", yearlyInvestment: "87335",
+      showSemiAnnual: true, showQuarterly: true, compoundingRate: "4.20",
+      riders: [{ name: "Total Disability Benefit", value: "Waiver" }],
+      dividendsText: "Compounding", multiGenText: "Until 3rd Generation"
+    },
+    desc: {
+      years: "10", ownerTitle: "", ownerName: "", insuredTitle: "Mr", insuredName: "Kaiser Felarca Fermindoza",
+      dob: "", gender: "", faceAmount: "1000000", yearlyInvestment: "41840",
+      showSemiAnnual: true, showQuarterly: true, riders: []
+    }
+  };
+}
+
+function opTitledName(title, name) {
+  var n = (name || "").trim();
+  if (!n) return "";
+  return title ? (title.toUpperCase() + ". " + n.toUpperCase()) : n.toUpperCase();
+}
+
+// If the advisor types "same" in the Insured field, pull the Owner's
+// title + name instead — one less place to re-type/mistype a name.
+function opResolveInsured(s) {
+  var raw = (s.insuredName || "").trim();
+  if (raw.toLowerCase() === "same") return opTitledName(s.ownerTitle, s.ownerName);
+  return opTitledName(s.insuredTitle, raw);
+}
+
+function opPeso(n) {
+  if (n === null || n === undefined || isNaN(n)) return "PHP 0";
+  var rounded = Math.round(n * 100) / 100;
+  var hasCents = Math.abs(rounded - Math.round(rounded)) > 0.001;
+  return "PHP " + rounded.toLocaleString("en-US", { minimumFractionDigits: hasCents ? 2 : 0, maximumFractionDigits: 2 });
+}
+
+function opCalcAge(dobStr) {
+  if (!dobStr) return null;
+  var dob = new Date(dobStr + "T00:00:00");
+  if (isNaN(dob.getTime())) return null;
+  var now = new Date();
+  var age = now.getFullYear() - dob.getFullYear();
+  var m = now.getMonth() - dob.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < dob.getDate())) age--;
+  return age;
+}
+
+function opMetaBits(s) {
+  var bits = [];
+  if (s.dob) {
+    var dobDate = new Date(s.dob + "T00:00:00");
+    if (!isNaN(dobDate.getTime())) {
+      var age = opCalcAge(s.dob);
+      var dobDisp = dobDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+      bits.push("Date of Birth: " + dobDisp + (age !== null ? " (Age " + age + ")" : ""));
+    }
+  }
+  if (s.gender) bits.push("Gender: " + s.gender);
+  return bits;
+}
+
+// ---- Editing-panel building blocks -----------------------------------
+
+function OnePagerField(props) {
+  return h("div", { className: "mb-3" },
+    h("div", { style: { color: COLORS.slate }, className: "text-[11px] font-mono uppercase tracking-wide mb-1.5" }, props.label),
+    h("input", {
+      type: props.type || "text",
+      value: props.value,
+      onChange: function (ev) { props.onChange(ev.target.value); },
+      placeholder: props.placeholder,
+      style: { background: COLORS.parchment, borderColor: COLORS.line, color: COLORS.ink },
+      className: "w-full px-3.5 py-2.5 rounded-xl border outline-none text-sm"
+    })
+  );
+}
+
+function OnePagerCheckboxField(props) {
+  return h("label", { className: "flex items-center gap-2.5 mb-3 text-sm", style: { color: COLORS.ink } },
+    h("input", { type: "checkbox", checked: !!props.checked, onChange: function (ev) { props.onChange(ev.target.checked); } }),
+    props.label
+  );
+}
+
+function OnePagerSelect(props) {
+  return h("select", {
+    value: props.value,
+    onChange: function (ev) { props.onChange(ev.target.value); },
+    style: { background: COLORS.parchment, borderColor: COLORS.line, color: COLORS.ink },
+    className: "px-2.5 py-2.5 rounded-xl border outline-none text-sm"
+  }, props.options.map(function (o) { return h("option", { key: o.value, value: o.value }, o.label); }));
+}
+
+function OnePagerYearPicker(props) {
+  return h("div", { className: "flex gap-1.5 mb-3" },
+    props.years.map(function (y) {
+      var on = props.value === y;
+      return h("button", {
+        key: y, type: "button", onClick: function () { props.onChange(y); },
+        style: { background: on ? COLORS.emphasis : COLORS.parchment, color: on ? "#fff" : COLORS.slate, borderColor: on ? COLORS.emphasis : COLORS.line },
+        className: "px-4 py-2 rounded-xl border text-sm font-semibold active:scale-95 transition-transform"
+      }, y);
+    })
+  );
+}
+
+function OnePagerComputedNote(props) {
+  return h("div", { style: { background: COLORS.parchment, borderColor: COLORS.line, color: COLORS.slate }, className: "rounded-xl border p-3 text-[11.5px] leading-relaxed mb-3" },
+    "Auto-computed from Face Amount \u2014 not editable here:",
+    props.lines.map(function (l, i) {
+      return h("div", { key: i, className: "mt-1" }, "\u2022 " + l.label + ": ", h("b", { style: { color: COLORS.ink } }, l.value));
+    })
+  );
+}
+
+// Generic 2-field row editor, used for both the grid's columns and the
+// list/desc riders — same shape (a label input, a value input, remove).
+function OnePagerRowEditor(props) {
+  return h("div", { className: "mb-3" },
+    props.items.map(function (item, i) {
+      return h("div", { key: i, style: { background: COLORS.parchment, borderColor: COLORS.line }, className: "rounded-xl border p-2.5 mb-2" },
+        props.keys.map(function (f, fi) {
+          return h("div", { key: f.key, className: fi > 0 ? "flex gap-2 mt-1.5" : "" },
+            h("input", {
+              type: "text", value: item[f.key],
+              onChange: function (ev) { props.onChangeItem(i, f.key, ev.target.value); },
+              placeholder: f.placeholder,
+              style: { background: COLORS.card, borderColor: COLORS.line, color: COLORS.ink },
+              className: "flex-1 px-3 py-2 rounded-lg border outline-none text-[13px]"
+            }),
+            fi > 0 && h("button", {
+              type: "button", onClick: function () { props.onRemove(i); },
+              style: { color: COLORS.rust }, className: "px-2.5 text-lg leading-none"
+            }, "\u00D7")
+          );
+        })
+      );
+    }),
+    h("button", {
+      type: "button", onClick: props.onAdd,
+      style: { borderColor: COLORS.line, color: COLORS.slate },
+      className: "w-full py-2.5 rounded-xl border border-dashed text-[13px] font-semibold active:scale-[0.98] transition-transform"
+    }, props.addLabel)
+  );
+}
+
+function OnePagerGridFields(props) {
+  var s = props.s;
+  return h("div", null,
+    h(OnePagerField, { label: "Client name", value: s.clientName, onChange: function (v) { props.setField("clientName", v); } }),
+    h(OnePagerField, { label: "Product / plan name (banner)", value: s.productName, onChange: function (v) { props.setField("productName", v); } }),
+    h("div", { style: { color: COLORS.slate }, className: "text-[11px] font-mono uppercase tracking-wide mb-1.5 mt-4" }, "Columns (" + s.cols.length + ")"),
+    h(OnePagerRowEditor, {
+      items: s.cols,
+      keys: [{ key: "h", placeholder: "Column header" }, { key: "v", placeholder: "Value" }],
+      onChangeItem: function (i, k, v) { props.setArrItem("cols", i, k, v); },
+      onRemove: function (i) { props.removeArrItem("cols", i); },
+      onAdd: function () { props.addArrItem("cols", { h: "NEW COLUMN", v: "" }); },
+      addLabel: "+ Add column"
+    })
+  );
+}
+
+// Shared by both "list" (Secure Income) and "desc" (Fit & Well) — same
+// Policy / People / Amounts / Riders shape, just different pay-period
+// options, computed-note math, and a couple of list-only trailing fields.
+function OnePagerPolicyFields(props) {
+  var mode = props.mode, s = props.s, setField = props.setField;
+  var faceNum = parseFloat(s.faceAmount) || 0;
+  var years = mode === "list" ? ["2", "5", "10", "15"] : ["10", "15", "20"];
+  var titleOptions = [{ value: "", label: "\u2014" }].concat(ONEPAGER_TITLES.map(function (t) { return { value: t, label: t + "." }; }));
+  var genderOptions = [{ value: "", label: "\u2014 select \u2014" }, { value: "Male", label: "Male" }, { value: "Female", label: "Female" }];
+
+  return h("div", null,
+    h("div", { style: { color: COLORS.slate }, className: "text-[11px] font-mono uppercase tracking-wide mb-1.5" }, "Policy"),
+    h("div", { style: { color: COLORS.slate }, className: "text-[11px] mb-1.5" }, "Pay period (years)"),
+    h(OnePagerYearPicker, { years: years, value: s.years, onChange: function (v) { setField("years", v); } }),
+    mode === "list" && h(OnePagerField, {
+      label: "Compounding interest rate (4.20%\u20134.50%)", type: "number",
+      value: s.compoundingRate, onChange: function (v) { setField("compoundingRate", v); }
+    }),
+
+    h("div", { style: { color: COLORS.slate }, className: "text-[11px] font-mono uppercase tracking-wide mb-1.5 mt-4" }, "People"),
+    h("div", { style: { color: COLORS.slate }, className: "text-[11px] mb-1.5" }, "Owner's name"),
+    h("div", { className: "flex gap-2 mb-3" },
+      h(OnePagerSelect, { value: s.ownerTitle, onChange: function (v) { setField("ownerTitle", v); }, options: titleOptions }),
+      h("input", {
+        type: "text", value: s.ownerName, onChange: function (ev) { setField("ownerName", ev.target.value); },
+        placeholder: "Owner's full name",
+        style: { background: COLORS.parchment, borderColor: COLORS.line, color: COLORS.ink },
+        className: "flex-1 px-3 py-2.5 rounded-xl border outline-none text-sm"
+      })
+    ),
+    h("div", { style: { color: COLORS.slate }, className: "text-[11px] mb-1.5" }, "Insured's name (type \u201Csame\u201D to copy the Owner)"),
+    h("div", { className: "flex gap-2 mb-3" },
+      h(OnePagerSelect, { value: s.insuredTitle, onChange: function (v) { setField("insuredTitle", v); }, options: titleOptions }),
+      h("input", {
+        type: "text", value: s.insuredName, onChange: function (ev) { setField("insuredName", ev.target.value); },
+        placeholder: "Insured's full name, or 'same'",
+        style: { background: COLORS.parchment, borderColor: COLORS.line, color: COLORS.ink },
+        className: "flex-1 px-3 py-2.5 rounded-xl border outline-none text-sm"
+      })
+    ),
+    h(OnePagerField, { label: "Date of birth", type: "date", value: s.dob, onChange: function (v) { setField("dob", v); } }),
+    h("div", { className: "mb-3" },
+      h("div", { style: { color: COLORS.slate }, className: "text-[11px] font-mono uppercase tracking-wide mb-1.5" }, "Gender"),
+      h(OnePagerSelect, { value: s.gender, onChange: function (v) { setField("gender", v); }, options: genderOptions })
+    ),
+
+    h("div", { style: { color: COLORS.slate }, className: "text-[11px] font-mono uppercase tracking-wide mb-1.5 mt-4" }, "Amounts"),
+    h(OnePagerField, { label: "Face amount (PHP)", type: "number", value: s.faceAmount, onChange: function (v) { setField("faceAmount", v); } }),
+    h(OnePagerField, { label: "Yearly investment amount \u2014 discounted rate (PHP)", type: "number", value: s.yearlyInvestment, onChange: function (v) { setField("yearlyInvestment", v); } }),
+    h(OnePagerCheckboxField, { label: "Show semi-annual", checked: s.showSemiAnnual, onChange: function (v) { setField("showSemiAnnual", v); } }),
+    h(OnePagerCheckboxField, { label: "Show quarterly", checked: s.showQuarterly, onChange: function (v) { setField("showQuarterly", v); } }),
+
+    mode === "list" && h(OnePagerComputedNote, {
+      lines: [
+        { label: "Guaranteed payout (6%)", value: opPeso(faceNum * 0.06) + " / yearly" },
+        { label: "Lifetime coverage (200%)", value: opPeso(faceNum * 2) },
+        { label: "Centennial bonus (25%)", value: opPeso(faceNum * 0.25) }
+      ]
+    }),
+    mode === "desc" && h(OnePagerComputedNote, {
+      lines: [
+        { label: "64 Major Critical Illness (100%)", value: opPeso(faceNum) },
+        { label: "34 Minor Critical Illness, capped", value: opPeso(Math.min(faceNum * 0.5, 1000000)) },
+        { label: "Specific Cancer Condition (+50%)", value: opPeso(faceNum * 0.5) },
+        { label: "Endowment Benefit (5%, age 65\u201378)", value: opPeso(faceNum * 0.05) },
+        { label: "Hospital Income Benefit (0.125%)", value: opPeso(faceNum * 0.00125) + " / day" },
+        { label: "Home Recovery Benefit (50% of HIB)", value: opPeso(faceNum * 0.00125 * 0.5) + " / day" }
+      ]
+    }),
+
+    h("div", { style: { color: COLORS.slate }, className: "text-[11px] font-mono uppercase tracking-wide mb-1.5 mt-4" }, "Riders / additional benefits (" + s.riders.length + ")"),
+    mode === "desc" && h("div", { style: { color: COLORS.slate }, className: "text-[11px] leading-relaxed mb-2" }, "Common ones for this product: Accidental Death Benefit, Hospital Income Benefit (as a rider, amount set by you)."),
+    h(OnePagerRowEditor, {
+      items: s.riders,
+      keys: [{ key: "name", placeholder: "Rider / benefit name" }, { key: "value", placeholder: "Value" }],
+      onChangeItem: function (i, k, v) { props.setArrItem("riders", i, k, v); },
+      onRemove: function (i) { props.removeArrItem("riders", i); },
+      onAdd: function () { props.addArrItem("riders", { name: "New rider / benefit", value: "" }); },
+      addLabel: "+ Add rider / benefit"
+    }),
+
+    mode === "list" && h("div", null,
+      h("div", { style: { color: COLORS.slate }, className: "text-[11px] font-mono uppercase tracking-wide mb-1.5 mt-4" }, "Other"),
+      h(OnePagerField, { label: "Dividends line (value shown)", value: s.dividendsText, onChange: function (v) { setField("dividendsText", v); } }),
+      h(OnePagerField, { label: "Multi-generational line (value shown)", value: s.multiGenText, onChange: function (v) { setField("multiGenText", v); } })
+    )
+  );
+}
+
+// ---- The one-pager document itself (this is what html2canvas captures) --
+
+function OnePagerHeaderBand() {
+  var todayStr = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  return h("div", { className: "op-header-band" },
+    h("div", { className: "op-header-brand" },
+      h(Shield, { size: 32, uid: "onepagerdoc" }),
+      h("div", null,
+        h("div", { className: "op-word" }, "Battle River Unit"),
+        h("div", { className: "op-tag" }, "FLOW WITH PURPOSE \u00B7 RISE WITH POWER")
+      )
+    ),
+    h("div", { className: "op-header-date" }, todayStr)
+  );
+}
+
+function OnePagerGridStage(props) {
+  var s = props.s, preparedBy = props.preparedBy;
+  return h(React.Fragment, null,
+    h("div", { className: "op-title1" }, "SUMMARY OF BENEFITS FOR " + (s.clientName || "").toUpperCase()),
+    h("div", { className: "op-banner" }, (s.productName || "").toUpperCase()),
+    h("table", { className: "op-grid" },
+      h("tbody", null,
+        h("tr", null, s.cols.map(function (c, i) { return h("th", { key: "h" + i }, c.h); })),
+        h("tr", null, s.cols.map(function (c, i) { return h("td", { key: "v" + i }, c.v); }))
+      )
+    ),
+    preparedBy && preparedBy.trim() && h("div", { className: "op-footer" }, "Prepared by: " + preparedBy.trim())
+  );
+}
+
+function OnePagerListStage(props) {
+  var s = props.s, preparedBy = props.preparedBy;
+  var faceAmount = parseFloat(s.faceAmount) || 0;
+  var yearly = parseFloat(s.yearlyInvestment) || 0;
+  var guaranteedPayout = faceAmount * 0.06;
+  var lifetimeCoverage = faceAmount * 2;
+  var centennialBonus = faceAmount * 0.25;
+  var age = opCalcAge(s.dob);
+  var payoutStartAge = (age !== null) ? age + 6 : null;
+  var insured = opResolveInsured(s);
+  var owner = opTitledName(s.ownerTitle, s.ownerName);
+  var metaBits = opMetaBits(s);
+  var freqBits = [];
+  if (s.showSemiAnnual) freqBits.push(opPeso(yearly * 0.53) + " ONLY semi-annually");
+  if (s.showQuarterly) freqBits.push(opPeso(yearly * 0.275) + " ONLY quarterly");
+  var captionAge = payoutStartAge !== null ? " (first payout at age " + payoutStartAge + ")" : "";
+
+  return h(React.Fragment, null,
+    h(OnePagerHeaderBand, null),
+    h("div", { className: "op-body-pad" },
+      h("div", { className: "op-title-row" },
+        h("span", { className: "op-doc-title" }, "Sun Life Secure Income"),
+        h("span", { className: "op-doc-pill" }, "PESO " + s.years)
+      ),
+      h("div", { className: "op-doc-sub" }, "Summary of Benefits on the Life of: ", h("strong", null, insured)),
+      owner && owner !== insured && h("div", { className: "op-doc-sub" }, "Owner: ", h("strong", null, owner)),
+      metaBits.length > 0 && h("div", { className: "op-doc-meta" }, metaBits.join("   \u00B7   ")),
+
+      h("div", { className: "op-hero" },
+        h("div", { className: "op-hero-label" }, "Guaranteed Yearly Payout \u2014 For Life"),
+        h("div", { className: "op-hero-amount" }, opPeso(guaranteedPayout), h("span", { className: "op-hero-amount-note" }, "(Tax-Free)")),
+        h("div", { className: "op-hero-caption" }, "Guaranteed at the end of the 6th policy year and every year thereafter, until age 100 years old of " + (insured || "the insured") + captionAge)
+      ),
+
+      h("div", { className: "op-section-title" }, "Your Investment"),
+      h("div", { className: "op-section-rows" },
+        h("div", { className: "op-row" },
+          h("span", { className: "op-lbl" }, "Yearly Investment Amount (discounted rate)"),
+          h("span", { className: "op-val" }, opPeso(yearly) + " ONLY", freqBits.length > 0 && h("span", { className: "op-sub" }, "or " + freqBits.join(" \u00B7 ")))
+        ),
+        h("div", { className: "op-row" },
+          h("span", { className: "op-lbl" }, "Face Amount"),
+          h("span", { className: "op-val" }, opPeso(faceAmount))
+        )
+      ),
+
+      h("div", { className: "op-section-title" }, "Protection & Coverage"),
+      h("div", { className: "op-section-rows" },
+        h("div", { className: "op-row" },
+          h("span", { className: "op-lbl" }, "Lifetime Insurance Coverage until age 100 (200% of Face Amount)"),
+          h("span", { className: "op-val" }, opPeso(lifetimeCoverage))
+        ),
+        s.riders.map(function (r, i) {
+          return h("div", { className: "op-row", key: "rider" + i },
+            h("span", { className: "op-lbl" }, r.name),
+            h("span", { className: "op-val" }, r.value)
+          );
+        })
+      ),
+
+      h("div", { className: "op-section-title" }, "Growth & Legacy"),
+      h("div", { className: "op-section-rows" },
+        h("div", { className: "op-row" },
+          h("span", { className: "op-lbl" }, "Compounding Interest Rate if funds left for accumulation"),
+          h("span", { className: "op-val" }, s.compoundingRate + "%")
+        ),
+        h("div", { className: "op-row" },
+          h("span", { className: "op-lbl" }, "Earn extra dividends starting on the Second Year"),
+          h("span", { className: "op-val" }, s.dividendsText)
+        ),
+        h("div", { className: "op-row" },
+          h("span", { className: "op-lbl" }, "Centennial Bonus (starting 80, 85, 90, 95 years old)"),
+          h("span", { className: "op-val" }, opPeso(centennialBonus), h("span", { className: "op-sub" }, "every 5 years"))
+        ),
+        h("div", { className: "op-row" },
+          h("span", { className: "op-lbl" }, "Multi-Generational Payout"),
+          h("span", { className: "op-val" }, s.multiGenText)
+        )
+      ),
+
+      preparedBy && preparedBy.trim() && h("div", { className: "op-footer2" }, h("div", { className: "op-prep" }, "Prepared by: " + preparedBy.trim()))
+    )
+  );
+}
+
+function OnePagerDescStage(props) {
+  var s = props.s, preparedBy = props.preparedBy;
+  var faFace = parseFloat(s.faceAmount) || 0;
+  var faYearly = parseFloat(s.yearlyInvestment) || 0;
+  var majorCI = faFace;
+  var minorCI = Math.min(faFace * 0.5, 1000000);
+  var cancerBooster = faFace * 0.5;
+  var endowment = faFace * 0.05;
+  var hib = faFace * 0.00125;
+  var hrb = hib * 0.5;
+  var insured = opResolveInsured(s);
+  var owner = opTitledName(s.ownerTitle, s.ownerName);
+  var metaBits = opMetaBits(s);
+  var freqBits = [];
+  if (s.showSemiAnnual) freqBits.push(opPeso(faYearly * 0.53) + " ONLY semi-annually");
+  if (s.showQuarterly) freqBits.push(opPeso(faYearly * 0.275) + " ONLY quarterly");
+
+  return h(React.Fragment, null,
+    h(OnePagerHeaderBand, null),
+    h("div", { className: "op-body-pad" },
+      h("div", { className: "op-title-row" },
+        h("span", { className: "op-doc-title" }, "Sun Fit and Well Advantage"),
+        h("span", { className: "op-doc-pill" }, s.years + "-PAY")
+      ),
+      h("div", { className: "op-doc-sub" }, "Summary of Benefits on the Life of: ", h("strong", null, insured)),
+      owner && owner !== insured && h("div", { className: "op-doc-sub" }, "Owner: ", h("strong", null, owner)),
+      metaBits.length > 0 && h("div", { className: "op-doc-meta" }, metaBits.join("   \u00B7   ")),
+
+      h("div", { className: "op-hero" },
+        h("div", { className: "op-hero-label" }, "64 Major Critical Illness Benefit"),
+        h("div", { className: "op-hero-amount" }, opPeso(majorCI)),
+        h("div", { className: "op-hero-caption" }, "Paid in full at 100% of the Face Amount if diagnosed with any of 64 covered major critical illnesses")
+      ),
+
+      h("div", { className: "op-section-title" }, "Your Investment"),
+      h("div", { className: "op-section-rows" },
+        h("div", { className: "op-row" },
+          h("span", { className: "op-lbl" }, "Yearly Investment Amount (discounted rate)"),
+          h("span", { className: "op-val" }, opPeso(faYearly) + " ONLY", freqBits.length > 0 && h("span", { className: "op-sub" }, "or " + freqBits.join(" \u00B7 ")))
+        ),
+        h("div", { className: "op-row" },
+          h("span", { className: "op-lbl" }, "Face Amount"),
+          h("span", { className: "op-val" }, opPeso(faFace))
+        )
+      ),
+
+      h("div", { className: "op-section-title" }, "Critical Illness Protection"),
+      h("div", { className: "op-section-rows" },
+        h("div", { className: "op-row" },
+          h("span", { className: "op-lbl" }, "34 Minor Critical Illness \u2014 3 claims (20% + 20% + 10% of Face Amount)"),
+          h("span", { className: "op-val" }, opPeso(minorCI), h("span", { className: "op-sub" }, "maximum combined: PHP 1,000,000"))
+        ),
+        h("div", { className: "op-row" },
+          h("span", { className: "op-lbl" }, "Specific Cancer Condition (Cancer Booster)"),
+          h("span", { className: "op-val" }, opPeso(cancerBooster), h("span", { className: "op-sub" }, "added to the Face Amount, payable once"))
+        )
+      ),
+
+      h("div", { className: "op-section-title" }, "Hospital & Recovery Benefits"),
+      h("div", { className: "op-section-rows" },
+        h("div", { className: "op-row" },
+          h("span", { className: "op-lbl" }, "Hospital Income Benefit (HIB) \u2014 0.125% of Face Amount"),
+          h("span", { className: "op-val" }, opPeso(hib), h("span", { className: "op-sub" }, "per day"))
+        ),
+        h("div", { className: "op-row" },
+          h("span", { className: "op-lbl" }, "Home Recovery Benefit (HRB) \u2014 50% of HIB"),
+          h("span", { className: "op-val" }, opPeso(hrb), h("span", { className: "op-sub" }, "per day"))
+        ),
+        h("div", { className: "op-row" },
+          h("span", { className: "op-lbl" }, "Endowment Benefits (age 65\u201378) \u2014 5% of Face Amount"),
+          h("span", { className: "op-val" }, opPeso(endowment), h("span", { className: "op-sub" }, "tax-free"))
+        )
+      ),
+
+      s.riders.length > 0 && h("div", null,
+        h("div", { className: "op-section-title" }, "Riders & Additional Benefits"),
+        h("div", { className: "op-section-rows" },
+          s.riders.map(function (r, i) {
+            return h("div", { className: "op-row", key: "rider" + i },
+              h("span", { className: "op-lbl" }, r.name),
+              h("span", { className: "op-val" }, r.value)
+            );
+          })
+        )
+      ),
+
+      preparedBy && preparedBy.trim() && h("div", { className: "op-footer2" }, h("div", { className: "op-prep" }, "Prepared by: " + preparedBy.trim()))
+    )
+  );
+}
+
+function OnePagerStage(props) {
+  if (props.mode === "list") return h(OnePagerListStage, props);
+  if (props.mode === "desc") return h(OnePagerDescStage, props);
+  return h(OnePagerGridStage, props);
+}
+
+// ---- Top-level view -----------------------------------------------------
+
+function OnePagerView(props) {
+  var advisor = props.advisor, onBump = props.onBump;
+  var modeState = useState("grid"); var mode = modeState[0], setMode = modeState[1];
+  var dataState = useState(opDefaultModes); var modes = dataState[0], setModes = dataState[1];
+  var formatState = useState("png"); var format = formatState[0], setFormat = formatState[1];
+  // Prefills from the signed-in advisor, same intent as every other
+  // per-advisor default in this file — editable in case someone is
+  // preparing a proposal on a teammate's behalf.
+  var preparedByState = useState(function () { return (advisor && advisor.name) || ""; });
+  var preparedBy = preparedByState[0], setPreparedBy = preparedByState[1];
+  var busyState = useState(false); var busy = busyState[0], setBusy = busyState[1];
+  var toastState = useState(null); var toast = toastState[0], setToast = toastState[1];
+  var stageRef = useRef(null);
+
+  function flash(msg) {
+    setToast(msg);
+    setTimeout(function () { setToast(null); }, 2200);
+  }
+
+  var s = modes[mode];
+
+  function setField(key, value) {
+    setModes(function (prev) {
+      var next = Object.assign({}, prev);
+      next[mode] = Object.assign({}, prev[mode]);
+      next[mode][key] = value;
+      return next;
+    });
+  }
+  function setArrItem(arrKey, idx, itemKey, value) {
+    setModes(function (prev) {
+      var arr = prev[mode][arrKey].slice();
+      arr[idx] = Object.assign({}, arr[idx]);
+      arr[idx][itemKey] = value;
+      var next = Object.assign({}, prev);
+      next[mode] = Object.assign({}, prev[mode]);
+      next[mode][arrKey] = arr;
+      return next;
+    });
+  }
+  function addArrItem(arrKey, item) {
+    setModes(function (prev) {
+      var next = Object.assign({}, prev);
+      next[mode] = Object.assign({}, prev[mode]);
+      next[mode][arrKey] = prev[mode][arrKey].concat([item]);
+      return next;
+    });
+  }
+  function removeArrItem(arrKey, idx) {
+    setModes(function (prev) {
+      var arr = prev[mode][arrKey].slice();
+      arr.splice(idx, 1);
+      var next = Object.assign({}, prev);
+      next[mode] = Object.assign({}, prev[mode]);
+      next[mode][arrKey] = arr;
+      return next;
+    });
+  }
+
+  function currentClientName() {
+    return (mode === "grid") ? s.clientName : opResolveInsured(s);
+  }
+  function currentProductSlug() {
+    if (mode === "list") return "secure-income-" + s.years + "pay";
+    if (mode === "desc") return "fit-and-well-" + s.years + "pay";
+    return slugify(s.productName);
+  }
+
+  // Reuses downloadBlob() — the same Web-Share-first, classic-download-
+  // fallback path Settings' JSON/CSV export already uses, so a one-pager
+  // on a phone can go straight to Messenger's share sheet instead of
+  // landing in Downloads. Bumps "presented" only after a real save.
+  function download() {
+    if (typeof window.html2canvas !== "function") {
+      flash("Image export is still loading \u2014 try again in a moment.");
+      return;
+    }
+    var node = stageRef.current;
+    if (!node) return;
+    setBusy(true);
+    var clientSlug = slugify(currentClientName());
+    var productSlug = currentProductSlug();
+    var stamp = todayStamp();
+    var mime = format === "jpeg" ? "image/jpeg" : "image/png";
+    var ext = format === "jpeg" ? "jpg" : "png";
+    var filename = "onepager-" + clientSlug + "-" + productSlug + "-" + stamp + "." + ext;
+
+    var doCapture = function () {
+      window.html2canvas(node, { scale: 2, backgroundColor: "#ffffff", useCORS: true }).then(function (canvas) {
+        canvas.toBlob(async function (blob) {
+          setBusy(false);
+          if (!blob) { flash("Couldn't generate the image \u2014 try again."); return; }
+          var ok = await downloadBlob(filename, mime, blob);
+          flash(ok ? "Ready \u2014 " + filename : "Couldn't save the image \u2014 try again.");
+          if (ok && onBump) onBump("presented", 1);
+        }, mime, 0.95);
+      }).catch(function () {
+        setBusy(false);
+        flash("Couldn't generate the image \u2014 try again.");
+      });
+    };
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(doCapture); else doCapture();
+  }
+
+  return h("div", { className: "px-5 pt-6 pb-16 max-w-md mx-auto" },
+    h("div", { className: "flex items-center gap-3.5 mb-5" },
+      h(Shield, { size: 40, uid: "onepagerheader" }),
+      h("div", null,
+        h("div", { style: { color: COLORS.brass }, className: "text-[10px] tracking-[0.28em] uppercase font-mono mb-0.5" }, "Battle River Unit"),
+        h("div", { style: { color: COLORS.ink }, className: "font-display text-xl" }, "One-Pager Generator")
+      )
+    ),
+
+    h("div", { className: "flex gap-1.5 mb-4", style: { overflowX: "auto" } },
+      Object.keys(ONEPAGER_MODE_META).map(function (key) {
+        var on = mode === key;
+        return h("button", {
+          key: key, type: "button", onClick: function () { setMode(key); },
+          style: { background: on ? COLORS.emphasis : COLORS.card, color: on ? "#fff" : COLORS.slate, borderColor: on ? COLORS.emphasis : COLORS.line },
+          className: "px-3.5 py-2 rounded-full border text-[12px] font-semibold whitespace-nowrap active:scale-95 transition-transform"
+        }, ONEPAGER_MODE_META[key].label);
+      })
+    ),
+    h("div", { style: { color: COLORS.slate }, className: "text-[12px] leading-relaxed mb-5" }, ONEPAGER_MODE_META[mode].hint),
+
+    h("div", { style: { background: COLORS.card, borderColor: COLORS.line }, className: "rounded-2xl border p-4 mb-5" },
+      h(OnePagerField, { label: "Prepared by", value: preparedBy, onChange: setPreparedBy, placeholder: "Advisor name" }),
+      mode === "grid" && h(OnePagerGridFields, { s: s, setField: setField, setArrItem: setArrItem, addArrItem: addArrItem, removeArrItem: removeArrItem }),
+      (mode === "list" || mode === "desc") && h(OnePagerPolicyFields, { mode: mode, s: s, setField: setField, setArrItem: setArrItem, addArrItem: addArrItem, removeArrItem: removeArrItem })
+    ),
+
+    h("div", { style: { color: COLORS.slate }, className: "text-[11px] font-mono uppercase tracking-wide mb-2.5" }, "Preview"),
+    h("div", { className: "mb-5 rounded-2xl", style: { overflowX: "auto", background: COLORS.line, padding: "14px" } },
+      h("div", {
+        ref: stageRef,
+        className: "bru-onepager" + ((mode === "list" || mode === "desc") ? " op-brudoc" : ""),
+        style: { margin: "0 auto" }
+      },
+        h(OnePagerStage, { mode: mode, s: s, preparedBy: preparedBy })
+      )
+    ),
+
+    h("div", { className: "flex items-center gap-2" },
+      h("div", { style: { background: COLORS.card, borderColor: COLORS.line }, className: "flex gap-1 rounded-xl p-1 border" },
+        ["png", "jpeg"].map(function (f) {
+          var on = format === f;
+          return h("button", {
+            key: f, type: "button", onClick: function () { setFormat(f); },
+            style: { background: on ? COLORS.emphasis : "transparent", color: on ? "#fff" : COLORS.slate },
+            className: "px-3.5 py-2 rounded-lg text-[11px] font-bold uppercase"
+          }, f);
+        })
+      ),
+      h(BusyButton, {
+        onClick: download, busy: busy, busyLabel: "Generating\u2026", label: "Download image",
+        className: "flex-1 py-3 rounded-xl text-white text-sm font-bold active:scale-[0.98] transition-transform"
+      })
+    ),
+    toast && h("div", { style: { color: COLORS.good }, className: "text-[12px] text-center mt-3 font-mono" }, toast),
+    h("div", { style: { height: "8px" } })
+  );
+}
+
 var TIER_META = {
   // Medallion
   "Bronze":     { ring: "#CD7F32", fill: "#8B4513", pips: 1, label: "Bronze" },
@@ -4468,7 +5220,10 @@ function SectionTitle(props) {
 //
 //   ?view=chats&convo=<id>        an open conversation
 //   ?view=names&prospect=<id>     the Names list, that card highlighted
-//   ?view=today                   today's activity logging
+//   ?view=today                   the One-Pager Generator (Patch 15)
+//   ?view=dailylog                today's activity logging (moved off the
+//                                 bottom tab in Patch 15; same screen,
+//                                 same data, reachable from More > Team)
 //   ?view=team | rewards | more
 //   ?view=manager&advisor=136662  a specific advisor, manager side
 //   ?view=manager&sheet=export
@@ -4478,12 +5233,14 @@ function SectionTitle(props) {
 // OneSignal digest sends ?view=overdue and home-screen shortcuts send
 // ?tab= and ?convo= — those are translated here rather than broken, so
 // notifications already in the wild keep landing on the right entity
-// instead of dumping the advisor on a generic home screen.
+// instead of dumping the advisor on a generic home screen. Note that any
+// old link or shortcut pointing at ?view=today (pre-Patch-15) now opens
+// the One-Pager Generator instead of the daily log — see Patch 15 notes.
 //
 // The hash form (#?view=...) is read as a fallback because some chat
 // clients strip query strings from shared links but keep the fragment.
 // ---------------------------------------------------------------------
-var VIEW_KEYS = ["chats", "names", "today", "team", "rewards", "more", "manager", "recruitment", "scriptedit", "payment"];
+var VIEW_KEYS = ["chats", "names", "today", "dailylog", "team", "rewards", "more", "manager", "recruitment", "scriptedit", "payment"];
 var ROUTE_KEYS = ["view", "advisor", "sheet", "lane", "q", "convo", "prospect", "focus"];
  
 function parseRoute() {
@@ -4576,7 +5333,7 @@ function isOneSignalConfigured() {
 }
  
 var APP_NAME = "Unit App";
-var APP_VERSION = "5.10.0-patch14";
+var APP_VERSION = "5.11.0-patch15";
  
 function isSupabaseConfigured() {
   return SUPABASE_URL.indexOf("YOUR-PROJECT") === -1 && SUPABASE_ANON_KEY.indexOf("YOUR-ANON") === -1;
@@ -7263,6 +8020,13 @@ function MoreView(props) {
   return h("div", { className: "px-4 pt-5" },
     h("div", { style: { color: COLORS.slate }, className: "text-[11px] font-mono uppercase tracking-widest mb-2.5" }, "Performance"),
     h("div", { className: "space-y-2 mb-7" },
+      // Patch 15: moved off the Today bottom tab when One-Pager took it
+      // over. Same screen, same data — just reached from here now.
+      h(MoreRow, {
+        glyph: "\u2713", label: "Daily Log",
+        hint: "Progress ring, activity logging, streak and consistency",
+        onClick: function () { props.onGo("dailylog"); }
+      }),
       h(MoreRow, {
         glyph: "\u2261", label: "Team",
         hint: "Leaderboard, today's totals and the unit's activity",
@@ -8691,7 +9455,11 @@ function App() {
   // rather than rendering an empty screen for someone without access.
   var managerOnly = requestedView === "manager" || requestedView === "recruitment" || requestedView === "scriptedit";
   var view = (managerOnly && !isManager) ? "today" : requestedView;
-  var isAdvisorTab = view === "today" || view === "team" || view === "rewards";
+  // Patch 15: "today" left this list when the One-Pager Generator took over
+  // that tab — it renders standalone below and needs none of AdvisorView's
+  // team data. The daily loop itself lives on at "dailylog" (reached from
+  // More), still an AdvisorView section like Team and Rewards.
+  var isAdvisorTab = view === "dailylog" || view === "team" || view === "rewards";
   // The script half renders whenever one of its destinations is showing.
   // It stays mounted (hidden) the rest of the time so its two sync
   // outboxes keep draining and a half-typed name survives a tab switch.
@@ -9502,10 +10270,16 @@ function App() {
   // rather than Team because it answers a question an advisor asks about
   // their own week; Team is a comparison they look up occasionally, so it
   // moves to More alongside Manager tools, Recruitment and backups.
+  //
+  // Patch 15: Today now opens the One-Pager Generator (client proposal
+  // summaries) instead of the daily activity loop. The daily loop wasn't
+  // deleted — it moved to More > Performance > Daily Log, following the
+  // exact precedent Team already set (an AdvisorView section reachable
+  // from More rather than pinned to the bar), so the five-tab cap holds.
   var navTabs = [
     { key: "chats", label: "Chats", icon: "chats", badge: overdueCount },
     { key: "payment", label: "Payment", icon: "payment" },
-    { key: "today", label: "Today", icon: "today" },
+    { key: "today", label: "Today", icon: "onepager" },
     { key: "rewards", label: "Rewards", icon: "rewards" },
     { key: "more", label: "More", icon: "more" }
   ];
@@ -9622,9 +10396,22 @@ function App() {
       view === "payment" && h(PaymentView, {
         advisorId: myIdentity && myIdentity.id
       }),
+
+      // Patch 15: Today's new tenant. Bumping "presented" (Clients
+      // Presented) on a successful download reuses the exact bump_metric()
+      // path every other manual METRICS entry already goes through, so a
+      // prepared proposal counts on the leaderboard/funnel the same way it
+      // would if logged by hand — no new column, no new RPC.
+      view === "today" && h(OnePagerView, {
+        advisor: myIdentity,
+        onBump: bump
+      }),
  
       isAdvisorTab && h(AdvisorView, {
-        section: view,
+        // "dailylog" is a routing name only — AdvisorView's own section
+        // keys (today/team/rewards) are untouched, so this still resolves
+        // to sectionBlocks.today, the same daily-loop content as before.
+        section: view === "dailylog" ? "today" : view,
         date: today, entry: myTodayEntry, pulse: pulse, targets: targets, saveError: saveError,
         onBump: bump, onToggleSocial: function () { upsertField({ social: !myTodayEntry.social }); }, onNote: function (note) { upsertField({ note: note }); },
         mySubmissions: mySubmissions,
