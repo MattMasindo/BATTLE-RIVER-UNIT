@@ -3675,6 +3675,7 @@ function OnePagerView(props) {
   var preparedByState = useState(function () { return (advisor && advisor.name) || ""; });
   var preparedBy = preparedByState[0], setPreparedBy = preparedByState[1];
   var busyState = useState(false); var busy = busyState[0], setBusy = busyState[1];
+  var shareBusyState = useState(false); var shareBusy = shareBusyState[0], setShareBusy = shareBusyState[1];
   var toastState = useState(null); var toast = toastState[0], setToast = toastState[1];
   var stageRef = useRef(null);
 
@@ -3732,41 +3733,72 @@ function OnePagerView(props) {
     if (mode === "maxilink") return "maxilink-" + (s.years === "Regular Pay" ? "regular-pay" : s.years + "pay");
     return slugify(s.productName);
   }
+  function buildFilename() {
+    var ext = format === "jpeg" ? "jpg" : "png";
+    return "onepager-" + slugify(currentClientName()) + "-" + currentProductSlug() + "-" + todayStamp() + "." + ext;
+  }
 
-  // Reuses downloadBlob() — the same Web-Share-first, classic-download-
-  // fallback path Settings' JSON/CSV export already uses, so a one-pager
-  // on a phone can go straight to Messenger's share sheet instead of
-  // landing in Downloads. Bumps "presented" only after a real save.
-  function download() {
+  // Renders the live preview node to a Blob. Shared by both actions below
+  // so "Download" and "Share" always capture identically — waits for
+  // webfonts so the first tap after a mode switch doesn't grab a
+  // half-styled frame.
+  function captureBlob() {
+    return new Promise(function (resolve) {
+      if (typeof window.html2canvas !== "function") { resolve(null); return; }
+      var node = stageRef.current;
+      if (!node) { resolve(null); return; }
+      var mime = format === "jpeg" ? "image/jpeg" : "image/png";
+      var doCapture = function () {
+        window.html2canvas(node, { scale: 2, backgroundColor: "#ffffff", useCORS: true }).then(function (canvas) {
+          canvas.toBlob(function (blob) { resolve(blob); }, mime, 0.95);
+        }).catch(function () { resolve(null); });
+      };
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(doCapture); else doCapture();
+    });
+  }
+
+  // Always a plain, deterministic browser download — no share sheet, no
+  // detour. This is what "Download" is expected to do on every platform,
+  // including macOS, where sharing an image (not just downloading it) was
+  // landing in AirDrop/Mail/Notes instead of the Downloads folder.
+  async function downloadImage() {
     if (typeof window.html2canvas !== "function") {
       flash("Image export is still loading \u2014 try again in a moment.");
       return;
     }
-    var node = stageRef.current;
-    if (!node) return;
     setBusy(true);
-    var clientSlug = slugify(currentClientName());
-    var productSlug = currentProductSlug();
-    var stamp = todayStamp();
-    var mime = format === "jpeg" ? "image/jpeg" : "image/png";
-    var ext = format === "jpeg" ? "jpg" : "png";
-    var filename = "onepager-" + clientSlug + "-" + productSlug + "-" + stamp + "." + ext;
+    var filename = buildFilename();
+    var blob = await captureBlob();
+    setBusy(false);
+    if (!blob) { flash("Couldn't generate the image \u2014 try again."); return; }
+    var ok = downloadImageBlob(filename, blob);
+    flash(ok ? "Downloaded \u2014 " + filename : "Couldn't save the image \u2014 try again.");
+    if (ok && onBump) onBump("presented", 1);
+  }
 
-    var doCapture = function () {
-      window.html2canvas(node, { scale: 2, backgroundColor: "#ffffff", useCORS: true }).then(function (canvas) {
-        canvas.toBlob(async function (blob) {
-          setBusy(false);
-          if (!blob) { flash("Couldn't generate the image \u2014 try again."); return; }
-          var ok = await downloadBlob(filename, mime, blob);
-          flash(ok ? "Ready \u2014 " + filename : "Couldn't save the image \u2014 try again.");
-          if (ok && onBump) onBump("presented", 1);
-        }, mime, 0.95);
-      }).catch(function () {
-        setBusy(false);
-        flash("Couldn't generate the image \u2014 try again.");
-      });
-    };
-    if (document.fonts && document.fonts.ready) document.fonts.ready.then(doCapture); else doCapture();
+  // Deliberately separate from Download: opens the OS share sheet on
+  // purpose, where Messenger shows up if it's installed on the device.
+  // Only rendered at all when ONEPAGER_CAN_SHARE_FILES says the browser
+  // can actually share files, so this never shows up as a dead button.
+  async function shareImage() {
+    if (typeof window.html2canvas !== "function") {
+      flash("Image export is still loading \u2014 try again in a moment.");
+      return;
+    }
+    setShareBusy(true);
+    var filename = buildFilename();
+    var blob = await captureBlob();
+    if (!blob) { setShareBusy(false); flash("Couldn't generate the image \u2014 try again."); return; }
+    var result = await shareImageBlob(filename, blob);
+    setShareBusy(false);
+    if (result.ok) {
+      flash("Shared \u2014 pick Messenger, AirDrop, or Mail from the sheet");
+      if (onBump) onBump("presented", 1);
+    } else if (result.reason === "cancelled") {
+      // Advisor backed out on purpose — no toast, nothing to report.
+    } else {
+      flash("Sharing isn't available here \u2014 try Download instead");
+    }
   }
 
   return h("div", { className: "px-5 pt-6 pb-16 max-w-md mx-auto" },
@@ -3820,9 +3852,17 @@ function OnePagerView(props) {
         })
       ),
       h(BusyButton, {
-        onClick: download, busy: busy, busyLabel: "Generating\u2026", label: "Download image",
+        onClick: downloadImage, busy: busy, busyLabel: "Generating\u2026", label: "Download",
         className: "flex-1 py-3 rounded-xl text-white text-sm font-bold active:scale-[0.98] transition-transform"
       })
+    ),
+    ONEPAGER_CAN_SHARE_FILES && h("div", { className: "mt-2" },
+      h(BusyButton, {
+        onClick: shareImage, busy: shareBusy, busyLabel: "Opening\u2026", label: "Share\u2026",
+        style: { background: "transparent", border: "1px solid " + COLORS.line, color: COLORS.ink },
+        className: "w-full py-2.5 rounded-xl text-sm font-semibold active:scale-[0.98] transition-transform"
+      }),
+      h("div", { style: { color: COLORS.slate }, className: "text-[11px] text-center mt-1.5" }, "Opens Messenger, AirDrop, or Mail \u2014 whatever this device offers")
     ),
     toast && h("div", { style: { color: COLORS.good }, className: "text-[12px] text-center mt-3 font-mono" }, toast),
     h("div", { style: { height: "8px" } })
@@ -5531,7 +5571,7 @@ function isOneSignalConfigured() {
 }
  
 var APP_NAME = "Unit App";
-var APP_VERSION = "5.12.0-patch16";
+var APP_VERSION = "5.13.0-patch17";
  
 function isSupabaseConfigured() {
   return SUPABASE_URL.indexOf("YOUR-PROJECT") === -1 && SUPABASE_ANON_KEY.indexOf("YOUR-ANON") === -1;
@@ -6830,6 +6870,63 @@ async function downloadBlob(filename, mime, content) {
     return false;
   }
 }
+
+// Patch 17: the One-Pager Generator stopped using downloadBlob() above.
+// downloadBlob() tries the Web Share API first — fine for a JSON/CSV
+// backup nobody's staring at, but on macOS Safari/Chrome, sharing an
+// *image* opens the native share sheet (AirDrop, Mail, Notes…) instead of
+// a normal download. Cancel that sheet, or pick anything that isn't
+// explicitly "Save File", and the image never reaches Downloads — exactly
+// what got reported. "Download" below is now a plain, deterministic
+// browser download on every platform; "Share" is a separate, explicit
+// button that opens the OS share sheet on purpose, which is also where
+// Messenger shows up on devices that have it installed.
+function downloadImageBlob(filename, blob) {
+  try {
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+// Returns {ok:true} on a real share, {ok:false, reason:"cancelled"} if the
+// advisor backed out of the sheet on purpose (never treated as an error),
+// or {ok:false, reason:"unsupported"} on browsers that can't share files
+// at all (most desktop browsers other than Safari) so the caller can hide
+// or explain the Share button accordingly rather than showing it as broken.
+async function shareImageBlob(filename, blob) {
+  if (!(navigator.share && navigator.canShare)) return { ok: false, reason: "unsupported" };
+  try {
+    var file = new File([blob], filename, { type: blob.type });
+    if (!navigator.canShare({ files: [file] })) return { ok: false, reason: "unsupported" };
+    await navigator.share({ files: [file] });
+    return { ok: true };
+  } catch (e) {
+    if (e && e.name === "AbortError") return { ok: false, reason: "cancelled" };
+    return { ok: false, reason: "error" };
+  }
+}
+
+// Computed once at load, not per-render — feature support doesn't change
+// mid-session. Gates whether the Share button renders at all: no point
+// showing a button that can only ever fail.
+var ONEPAGER_CAN_SHARE_FILES = (function () {
+  try {
+    if (!(navigator.share && navigator.canShare)) return false;
+    var testFile = new File(["x"], "test.png", { type: "image/png" });
+    return navigator.canShare({ files: [testFile] });
+  } catch (e) {
+    return false;
+  }
+})();
  
 function exportJSON(advisor, convos, prospects) {
   var payload = {
