@@ -10271,7 +10271,8 @@ function App() {
   // their own week; Team is a comparison they look up occasionally, so it
   // moves to More alongside Manager tools, Recruitment and backups.
   //
-  // Patch 15: Today now opens the One-Pager Generator (client proposal
+  // Patch 15: the "today" tab (route key unchanged, label now
+  // "Prospectus") opens the One-Pager Generator (client proposal
   // summaries) instead of the daily activity loop. The daily loop wasn't
   // deleted — it moved to More > Performance > Daily Log, following the
   // exact precedent Team already set (an AdvisorView section reachable
@@ -10279,7 +10280,7 @@ function App() {
   var navTabs = [
     { key: "chats", label: "Chats", icon: "chats", badge: overdueCount },
     { key: "payment", label: "Payment", icon: "payment" },
-    { key: "today", label: "Today", icon: "onepager" },
+    { key: "today", label: "Prospectus", icon: "onepager" },
     { key: "rewards", label: "Rewards", icon: "rewards" },
     { key: "more", label: "More", icon: "more" }
   ];
