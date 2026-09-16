@@ -608,7 +608,29 @@ function computeReceivable(code, referrals, monthBoards) {
 }
  
 function fmtPhp(n) { return "\u20b1" + Math.round(n || 0).toLocaleString(); }
- 
+
+// Comma-grouped amount typing for plain PHP figures (Prospectus and
+// Payment). formatMoneyInput() is what the input DISPLAYS \u2014 it inserts
+// thousands separators so an advisor can tell "100,000" from "1,000,000"
+// at a glance while typing. cleanMoneyInput() is what gets STORED \u2014 the
+// same digits with the commas stripped back out, so anything downstream
+// that does parseFloat() on a Prospectus figure keeps working unchanged.
+function cleanMoneyInput(raw) {
+  var str = String(raw == null ? "" : raw).replace(/[^\d.]/g, "");
+  var dot = str.indexOf(".");
+  if (dot === -1) return str;
+  return str.slice(0, dot + 1) + str.slice(dot + 1).replace(/\./g, "");
+}
+function formatMoneyInput(raw) {
+  var str = cleanMoneyInput(raw);
+  if (!str) return "";
+  var dot = str.indexOf(".");
+  var intPart = dot === -1 ? str : str.slice(0, dot);
+  var decPart = dot === -1 ? "" : "." + str.slice(dot + 1).slice(0, 2);
+  intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return intPart + decPart;
+}
+
 function delay(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
  
 async function withRetry(fn, retries) {
@@ -1239,6 +1261,14 @@ function NavIcon(props) {
       h("rect", { x: "3.5", y: "6", width: "17", height: "12.5", rx: "2.2" }),
       h("path", { d: "M3.5 10h17" }),
       h("path", { d: "M6.5 15h4" })
+    );
+  }
+  // Patch 18: Underwriting guide's own bottom-tab icon (a medical cross)
+  // — swapped into the bar in place of Rewards, which moved to More.
+  if (n === "underwriting") {
+    return h("svg", common,
+      h("path", { d: "M12 3l7.5 3v6c0 4.6-3.2 7.9-7.5 9.4C7.7 19.9 4.5 16.6 4.5 12V6z" }),
+      h("path", { d: "M12 8.5v7M8.5 12h7" })
     );
   }
   return h("svg", common,
@@ -3090,12 +3120,20 @@ function opMetaBits(s) {
 // ---- Editing-panel building blocks -----------------------------------
 
 function OnePagerField(props) {
+  // Patch 18: `numeric` swaps the native number input for a plain text
+  // one so we can show comma thousands-separators as the advisor types
+  // (native number inputs refuse to display commas at all). The state
+  // behind it stays a clean, comma-free digit string — cleanMoneyInput()
+  // strips whatever was typed back down before it's stored — so every
+  // parseFloat(s.faceAmount) elsewhere in the One-Pager code is untouched.
+  var numeric = !!props.numeric;
   return h("div", { className: "mb-3" },
     h("div", { style: { color: COLORS.slate }, className: "text-[11px] font-mono uppercase tracking-wide mb-1.5" }, props.label),
     h("input", {
-      type: props.type || "text",
-      value: props.value,
-      onChange: function (ev) { props.onChange(ev.target.value); },
+      type: numeric ? "text" : (props.type || "text"),
+      inputMode: numeric ? "decimal" : undefined,
+      value: numeric ? formatMoneyInput(props.value) : props.value,
+      onChange: function (ev) { props.onChange(numeric ? cleanMoneyInput(ev.target.value) : ev.target.value); },
       placeholder: props.placeholder,
       style: { background: COLORS.parchment, borderColor: COLORS.line, color: COLORS.ink },
       className: "w-full px-3.5 py-2.5 rounded-xl border outline-none text-sm"
@@ -3235,8 +3273,8 @@ function OnePagerMaxilinkFields(props) {
     ),
 
     h("div", { style: { color: COLORS.slate }, className: "text-[11px] font-mono uppercase tracking-wide mb-1.5 mt-4" }, "Amounts"),
-    h(OnePagerField, { label: "Face amount (PHP)", type: "number", value: s.faceAmount, onChange: function (v) { setField("faceAmount", v); } }),
-    h(OnePagerField, { label: "Yearly investment amount \u2014 discounted rate (PHP)", type: "number", value: s.yearlyInvestment, onChange: function (v) { setField("yearlyInvestment", v); } }),
+    h(OnePagerField, { label: "Face amount (PHP)", numeric: true, value: s.faceAmount, onChange: function (v) { setField("faceAmount", v); } }),
+    h(OnePagerField, { label: "Yearly investment amount \u2014 discounted rate (PHP)", numeric: true, value: s.yearlyInvestment, onChange: function (v) { setField("yearlyInvestment", v); } }),
     h(OnePagerCheckboxField, { label: "Show semi-annual", checked: s.showSemiAnnual, onChange: function (v) { setField("showSemiAnnual", v); } }),
     h(OnePagerCheckboxField, { label: "Show quarterly", checked: s.showQuarterly, onChange: function (v) { setField("showQuarterly", v); } }),
 
@@ -3325,8 +3363,8 @@ function OnePagerPolicyFields(props) {
     ),
 
     h("div", { style: { color: COLORS.slate }, className: "text-[11px] font-mono uppercase tracking-wide mb-1.5 mt-4" }, "Amounts"),
-    h(OnePagerField, { label: "Face amount (PHP)", type: "number", value: s.faceAmount, onChange: function (v) { setField("faceAmount", v); } }),
-    h(OnePagerField, { label: "Yearly investment amount \u2014 discounted rate (PHP)", type: "number", value: s.yearlyInvestment, onChange: function (v) { setField("yearlyInvestment", v); } }),
+    h(OnePagerField, { label: "Face amount (PHP)", numeric: true, value: s.faceAmount, onChange: function (v) { setField("faceAmount", v); } }),
+    h(OnePagerField, { label: "Yearly investment amount \u2014 discounted rate (PHP)", numeric: true, value: s.yearlyInvestment, onChange: function (v) { setField("yearlyInvestment", v); } }),
     h(OnePagerCheckboxField, { label: "Show semi-annual", checked: s.showSemiAnnual, onChange: function (v) { setField("showSemiAnnual", v); } }),
     h(OnePagerCheckboxField, { label: "Show quarterly", checked: s.showQuarterly, onChange: function (v) { setField("showQuarterly", v); } }),
 
@@ -3384,7 +3422,7 @@ function OnePagerHeaderBand() {
 }
 
 function OnePagerGridStage(props) {
-  var s = props.s, preparedBy = props.preparedBy;
+  var s = props.s, preparedBy = props.preparedBy, avatarSrc = props.avatarSrc;
   return h(React.Fragment, null,
     h("div", { className: "op-title1" }, "SUMMARY OF BENEFITS FOR " + (s.clientName || "").toUpperCase()),
     h("div", { className: "op-banner" }, (s.productName || "").toUpperCase()),
@@ -3394,7 +3432,7 @@ function OnePagerGridStage(props) {
         h("tr", null, s.cols.map(function (c, i) { return h("td", { key: "v" + i }, c.v); }))
       )
     ),
-    preparedBy && preparedBy.trim() && h("div", { className: "op-footer" }, "Prepared by: " + preparedBy.trim())
+    preparedBy && preparedBy.trim() && h("div", { className: "op-footer", style: { display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "8px" } }, avatarSrc && h("img", { src: avatarSrc, alt: "", style: { width: "20px", height: "20px", borderRadius: "50%", objectFit: "cover", flexShrink: 0 } }), h("span", null, "Prepared by: " + preparedBy.trim()))
   );
 }
 
@@ -3404,7 +3442,7 @@ function OnePagerGridStage(props) {
 // advisor has actually typed a figure in, so an untouched field doesn't
 // show up on the document as "PHP 0".
 function OnePagerMaxilinkStage(props) {
-  var s = props.s, preparedBy = props.preparedBy;
+  var s = props.s, preparedBy = props.preparedBy, avatarSrc = props.avatarSrc;
   var faceAmount = parseFloat(s.faceAmount) || 0;
   var yearly = parseFloat(s.yearlyInvestment) || 0;
   var lifeCoverage = faceAmount * 2;
@@ -3474,13 +3512,13 @@ function OnePagerMaxilinkStage(props) {
         )
       ),
 
-      preparedBy && preparedBy.trim() && h("div", { className: "op-footer2" }, h("div", { className: "op-prep" }, "Prepared by: " + preparedBy.trim()))
+      preparedBy && preparedBy.trim() && h("div", { className: "op-footer2", style: { display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "8px" } }, avatarSrc && h("img", { src: avatarSrc, alt: "", style: { width: "20px", height: "20px", borderRadius: "50%", objectFit: "cover", flexShrink: 0 } }), h("div", { className: "op-prep" }, "Prepared by: " + preparedBy.trim()))
     )
   );
 }
 
 function OnePagerListStage(props) {
-  var s = props.s, preparedBy = props.preparedBy;
+  var s = props.s, preparedBy = props.preparedBy, avatarSrc = props.avatarSrc;
   var faceAmount = parseFloat(s.faceAmount) || 0;
   var yearly = parseFloat(s.yearlyInvestment) || 0;
   var guaranteedPayout = faceAmount * 0.06;
@@ -3559,13 +3597,13 @@ function OnePagerListStage(props) {
         )
       ),
 
-      preparedBy && preparedBy.trim() && h("div", { className: "op-footer2" }, h("div", { className: "op-prep" }, "Prepared by: " + preparedBy.trim()))
+      preparedBy && preparedBy.trim() && h("div", { className: "op-footer2", style: { display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "8px" } }, avatarSrc && h("img", { src: avatarSrc, alt: "", style: { width: "20px", height: "20px", borderRadius: "50%", objectFit: "cover", flexShrink: 0 } }), h("div", { className: "op-prep" }, "Prepared by: " + preparedBy.trim()))
     )
   );
 }
 
 function OnePagerDescStage(props) {
-  var s = props.s, preparedBy = props.preparedBy;
+  var s = props.s, preparedBy = props.preparedBy, avatarSrc = props.avatarSrc;
   var faFace = parseFloat(s.faceAmount) || 0;
   var faYearly = parseFloat(s.yearlyInvestment) || 0;
   var majorCI = faFace;
@@ -3650,7 +3688,7 @@ function OnePagerDescStage(props) {
         )
       ),
 
-      preparedBy && preparedBy.trim() && h("div", { className: "op-footer2" }, h("div", { className: "op-prep" }, "Prepared by: " + preparedBy.trim()))
+      preparedBy && preparedBy.trim() && h("div", { className: "op-footer2", style: { display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "8px" } }, avatarSrc && h("img", { src: avatarSrc, alt: "", style: { width: "20px", height: "20px", borderRadius: "50%", objectFit: "cover", flexShrink: 0 } }), h("div", { className: "op-prep" }, "Prepared by: " + preparedBy.trim()))
     )
   );
 }
@@ -3665,7 +3703,7 @@ function OnePagerStage(props) {
 // ---- Top-level view -----------------------------------------------------
 
 function OnePagerView(props) {
-  var advisor = props.advisor, onBump = props.onBump;
+  var advisor = props.advisor, onBump = props.onBump, avatarSrc = props.avatarSrc;
   var modeState = useState("maxilink"); var mode = modeState[0], setMode = modeState[1];
   var dataState = useState(opDefaultModes); var modes = dataState[0], setModes = dataState[1];
   var formatState = useState("png"); var format = formatState[0], setFormat = formatState[1];
@@ -3836,7 +3874,7 @@ function OnePagerView(props) {
         className: "bru-onepager" + ((mode === "list" || mode === "desc" || mode === "maxilink") ? " op-brudoc" : ""),
         style: { margin: "0 auto" }
       },
-        h(OnePagerStage, { mode: mode, s: s, preparedBy: preparedBy })
+        h(OnePagerStage, { mode: mode, s: s, preparedBy: preparedBy, avatarSrc: avatarSrc })
       )
     ),
 
@@ -8326,18 +8364,17 @@ function MoreView(props) {
         glyph: "\u2261", label: "Team",
         hint: "Leaderboard, today's totals and the unit's activity",
         onClick: function () { props.onGo("team"); }
-      })
-    ),
- 
-    h("div", { style: { color: COLORS.slate }, className: "text-[11px] font-mono uppercase tracking-widest mb-2.5" }, "Reference"),
-    h("div", { className: "space-y-2 mb-7" },
+      }),
+      // Patch 18: swapped out of the bottom tab bar for Underwriting
+      // guide (Matt wants that reachable mid-sale) \u2014 Rewards lives here
+      // now, next to Team, since both are "how's my week going" checks.
       h(MoreRow, {
-        glyph: "\u2695", label: "Underwriting guide",
-        hint: "Search a medical condition \u2014 Life, CI and Sun Fit & Well decisions",
-        onClick: function () { props.onGo("underwriting"); }
+        glyph: "\u2605", label: "Rewards",
+        hint: "Receivable, lanes, awards and referrals",
+        onClick: function () { props.onGo("rewards"); }
       })
     ),
- 
+
     h("div", { style: { color: COLORS.slate }, className: "text-[11px] font-mono uppercase tracking-widest mb-2.5" }, "Unit management"),
     h("div", { className: "space-y-2 mb-7" },
       h(MoreRow, {
@@ -8402,7 +8439,7 @@ function MoreView(props) {
 var PAYMENT_FIELDS = [
   { key: "NAME", label: "Client / payor's full name", placeholder: "Juan Dela Cruz" },
   { key: "SER", label: "SER / Policy / Subscriber / Account No.", placeholder: "e.g. 0012345678" },
-  { key: "AMOUNT", label: "Amount (Php)", placeholder: "e.g. 5,000" },
+  { key: "AMOUNT", label: "Amount (Php)", placeholder: "e.g. 5,000", numeric: true },
   { key: "EMAIL", label: "Email address", placeholder: "name@email.com" },
   { key: "NICKNAME", label: "Policy nickname", placeholder: "e.g. Sun Maxilink Bright" }
 ];
@@ -8594,11 +8631,19 @@ function PaymentView(props) {
       "Fill in once — applies to every method below"),
     h("div", { style: { background: COLORS.card, borderColor: COLORS.line }, className: "rounded-2xl border p-4 mb-6 space-y-2.5" },
       PAYMENT_FIELDS.map(function (f) {
+        // AMOUNT gets comma thousands-separators live as it's typed, so
+        // it's easy to tell 100,000 from 1,000,000 at a glance — same
+        // formatMoneyInput()/cleanMoneyInput() pair the Prospectus fields
+        // use. This field is only ever pasted into the message templates
+        // below (fillPayment), never parsed as a number, so the stored
+        // value can just be the formatted, comma-included string.
         return h("div", { key: f.key },
           h("label", { style: { color: COLORS.slate }, className: "block text-[11px] font-mono uppercase tracking-wide mb-1" }, f.label),
           h("input", {
+            type: "text",
+            inputMode: f.numeric ? "decimal" : undefined,
             value: fields[f.key] || "",
-            onChange: function (ev) { setField(f.key, ev.target.value); },
+            onChange: function (ev) { setField(f.key, f.numeric ? formatMoneyInput(ev.target.value) : ev.target.value); },
             placeholder: f.placeholder,
             style: { background: COLORS.parchment, borderColor: COLORS.line, color: COLORS.ink },
             className: "w-full px-3.5 py-2.5 rounded-xl border outline-none text-[14px]"
@@ -10840,11 +10885,11 @@ function App() {
  
   // Jakob's Law caps a bottom bar at about five destinations before it
   // stops reading as navigation and starts reading as a menu. Five it is,
-  // in the order the work actually happens: talk to people, keep the
-  // list, log the day, see what it earns you. Rewards sits in the bar
-  // rather than Team because it answers a question an advisor asks about
-  // their own week; Team is a comparison they look up occasionally, so it
-  // moves to More alongside Manager tools, Recruitment and backups.
+  // in the order the work actually happens: talk to people, take payment,
+  // send the prospectus, check the underwriting guide. Rewards moved to
+  // More alongside Team, Manager tools, Recruitment and backups — Matt
+  // wanted Underwriting guide reachable from the bar instead, since it's
+  // consulted mid-sale rather than looked up occasionally like Rewards.
   //
   // Patch 15: the "today" tab (route key unchanged, label now
   // "Prospectus") opens the One-Pager Generator (client proposal
@@ -10856,7 +10901,7 @@ function App() {
     { key: "chats", label: "Chats", icon: "chats", badge: overdueCount },
     { key: "payment", label: "Payment", icon: "payment" },
     { key: "today", label: "Prospectus", icon: "onepager" },
-    { key: "rewards", label: "Rewards", icon: "rewards" },
+    { key: "underwriting", label: "Underwriter", icon: "underwriting" },
     { key: "more", label: "More", icon: "more" }
   ];
  
@@ -10984,7 +11029,8 @@ function App() {
       // would if logged by hand — no new column, no new RPC.
       view === "today" && h(OnePagerView, {
         advisor: myIdentity,
-        onBump: bump
+        onBump: bump,
+        avatarSrc: myIdentity && avatars[myIdentity.id]
       }),
  
       isAdvisorTab && h(AdvisorView, {
