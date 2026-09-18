@@ -4010,6 +4010,24 @@ function ManagerView(props) {
   var openRecState = useState(null); var openRec = openRecState[0], setOpenRec = openRecState[1];
   var searchState = useState(route.q || ""); var search = searchState[0], setSearch = searchState[1];
   var showRemovedState = useState(false); var showRemoved = showRemovedState[0], setShowRemoved = showRemovedState[1];
+  // Sample/test accounts hidden from just the 30-Day Consistency widget.
+  // Deliberately separate from onSetAdvisorActive ("Remove from team"),
+  // which pulls someone out of the whole app (Today's Momentum, targets,
+  // etc). This is scoped to one manager's browser and one section.
+  var hiddenConsState = useState(function () { return lget("br-consistency-hidden", []); });
+  var hiddenConsistency = hiddenConsState[0], setHiddenConsistency = hiddenConsState[1];
+  var consSortState = useState(function () { return lget("br-consistency-sort", "roster"); });
+  var consSort = consSortState[0], setConsSort = consSortState[1];
+  var showHiddenConsState = useState(false); var showHiddenCons = showHiddenConsState[0], setShowHiddenCons = showHiddenConsState[1];
+  function hideFromConsistency(code) {
+    if (hiddenConsistency.indexOf(code) !== -1) return;
+    var next = hiddenConsistency.concat([code]);
+    setHiddenConsistency(next); lset("br-consistency-hidden", next);
+  }
+  function unhideFromConsistency(code) {
+    var next = hiddenConsistency.filter(function (c) { return c !== code; });
+    setHiddenConsistency(next); lset("br-consistency-hidden", next);
+  }
  
   // A search arriving from a shared link or the header search sheet must
   // land on the filtered list, not on an unfiltered dashboard (rule 15).
@@ -4122,7 +4140,6 @@ function ManagerView(props) {
  
   var refInc = useIncremental(filteredReferrals.length, 8, searchTerm, "mgr-referrals");
   var advInc = useIncremental(activeAdvisors.length, 10, roster.length, "mgr-advisors");
-  var consInc = useIncremental(activeAdvisors.length, 6, roster.length, "mgr-consistency");
   var settledInc = useIncremental(settledSubs.length, 10, submissions.length, "mgr-settled");
  
   var listIsCold = !!loading && teamEntries.length === 0;
@@ -4137,6 +4154,28 @@ function ManagerView(props) {
     var byDate = entriesByDate(teamEntries, r.code);
     return consistencyStatsFrom(byDate, advisorStartDateFrom(r, byDate), last30);
   };
+
+  // Sample accounts hidden here stay in the roster everywhere else —
+  // only this widget's own list is filtered.
+  var consistencyVisible = activeAdvisors.filter(function (r) { return hiddenConsistency.indexOf(r.code) === -1; });
+  var consistencyHiddenAdvisors = activeAdvisors.filter(function (r) { return hiddenConsistency.indexOf(r.code) !== -1; });
+  var consistencyRows = consistencyVisible.map(function (r) {
+    var stats = consistencyStats(r);
+    return { r: r, stats: stats, pct: consistencyPct(stats) };
+  });
+  if (consSort === "activity") {
+    // Top to bottom by logged activity. Advisors who haven't started yet
+    // (null pct) have nothing to rank, so they sink to the bottom rather
+    // than tying with a 0% advisor who has actually missed days.
+    consistencyRows = consistencyRows.slice().sort(function (a, b) {
+      if (a.pct === null && b.pct === null) return 0;
+      if (a.pct === null) return 1;
+      if (b.pct === null) return -1;
+      if (b.pct !== a.pct) return b.pct - a.pct;
+      return b.stats.loggedWeekdays - a.stats.loggedWeekdays;
+    });
+  }
+  var consInc = useIncremental(consistencyRows.length, 6, roster.length + "|" + hiddenConsistency.length + "|" + consSort, "mgr-consistency");
  
   return h("div", { className: "px-5 mt-6 space-y-6" },
     h("div", { className: "flex items-center justify-between" },
@@ -4197,15 +4236,26 @@ function ManagerView(props) {
           )
     ),
     h("div", null,
-      h(SectionTitle, { label: "30-Day Consistency" }),
+      h("div", { className: "flex items-center justify-between gap-2 mb-2.5 flex-wrap" },
+        h(SectionTitle, { label: "30-Day Consistency", bare: true }),
+        h("button", {
+          onClick: function () {
+            var next = consSort === "activity" ? "roster" : "activity";
+            setConsSort(next); lset("br-consistency-sort", next);
+          },
+          "aria-label": consSort === "activity" ? "Sort alphabetically" : "Sort by most active",
+          style: { borderColor: consSort === "activity" ? COLORS.brass : COLORS.line, color: consSort === "activity" ? COLORS.brass : COLORS.slate },
+          className: "px-2.5 py-1 rounded-lg border text-[10px] font-mono shrink-0"
+        }, consSort === "activity" ? "\u2713 Most active first" : "Sort by activity")
+      ),
       h("div", { style: { color: COLORS.slate }, className: "text-[11px] leading-relaxed mb-2.5" },
         "Left to right = last 30 days, oldest to today. Gold = full funnel, teal = logged, dim = missed, hollow = before they joined. Each advisor is scored only against the weekdays they've actually been on the system, so a new advisor isn't penalised for days that weren't theirs to miss."),
       listIsCold ? h(SkeletonList, { rows: 4 }) : h("div", { style: { background: COLORS.card, borderColor: COLORS.line }, className: "rounded-2xl border divide-y" },
-        activeAdvisors.length === 0
-          ? h("div", { style: { color: COLORS.slate }, className: "p-4 text-sm text-center" }, "No active advisors.")
-          : activeAdvisors.slice(0, consInc.count).map(function (r) {
-              var stats = consistencyStats(r);
-              var pct = consistencyPct(stats);
+        consistencyRows.length === 0
+          ? h("div", { style: { color: COLORS.slate }, className: "p-4 text-sm text-center" },
+              activeAdvisors.length === 0 ? "No active advisors." : "Everyone's hidden from this list \u2014 show someone below to bring them back.")
+          : consistencyRows.slice(0, consInc.count).map(function (row) {
+              var r = row.r, stats = row.stats, pct = row.pct;
               return h("div", { key: r.code, className: "px-4 py-3" },
                 h("div", { className: "flex items-center justify-between gap-2 mb-2" },
                   h("div", { className: "flex items-center gap-2 min-w-0" },
@@ -4215,15 +4265,24 @@ function ManagerView(props) {
                       className: "text-[9px] font-mono px-1.5 py-0.5 rounded shrink-0"
                     }, "NEW \u00B7 DAY " + stats.eligibleWeekdays)
                   ),
-                  h("div", { style: { color: COLORS.slate }, className: "text-[10px] font-mono shrink-0" },
-                    stats.eligibleWeekdays === 0
-                      ? "not started"
-                      : stats.loggedWeekdays + "/" + stats.eligibleWeekdays + " weekdays \u00B7 " + pct + "%")
+                  h("div", { className: "flex items-center gap-2.5 shrink-0" },
+                    h("div", { style: { color: COLORS.slate }, className: "text-[10px] font-mono" },
+                      stats.eligibleWeekdays === 0
+                        ? "not started"
+                        : stats.loggedWeekdays + "/" + stats.eligibleWeekdays + " weekdays \u00B7 " + pct + "%"),
+                    h("button", {
+                      onClick: function () { hideFromConsistency(r.code); },
+                      "aria-label": "Hide " + r.name + " from 30-Day Consistency",
+                      title: "Hide from this list \u2014 for sample/test accounts",
+                      style: { color: COLORS.slate },
+                      className: "text-[11px] font-mono active:opacity-60"
+                    }, "hide")
+                  )
                 ),
                 h("div", { style: { display: "grid", gridTemplateColumns: "repeat(30, 1fr)", gap: "2.5px" } },
                   stats.cells.map(function (c, idx) {
                     // Pre-tenure days render hollow, never as the same solid
-                    // grey used for a real miss — that collision is what made
+                    // grey used for a real miss \u2014 that collision is what made
                     // a three-day-old advisor look like 25 failures.
                     if (c.preTenure) {
                       return h("div", {
@@ -4247,6 +4306,26 @@ function ManagerView(props) {
               );
             }),
         consInc.sentinel
+      ),
+      consistencyHiddenAdvisors.length > 0 && h("div", { className: "mt-2" },
+        h("button", {
+          onClick: function () { setShowHiddenCons(!showHiddenCons); },
+          style: { color: COLORS.slate },
+          className: "text-[11px] font-mono"
+        }, (showHiddenCons ? "\u25be Hide " : "\u25b8 Show ") + consistencyHiddenAdvisors.length + " hidden from this list"),
+        showHiddenCons && h("div", { style: { background: COLORS.card, borderColor: COLORS.line }, className: "rounded-2xl border divide-y mt-1.5" },
+          consistencyHiddenAdvisors.map(function (r) {
+            return h("div", { key: r.code, className: "px-4 py-2.5 flex items-center justify-between gap-2" },
+              h("span", { style: { color: COLORS.slate }, className: "text-sm truncate" }, r.name),
+              h("button", {
+                onClick: function () { unhideFromConsistency(r.code); },
+                "aria-label": "Unhide " + r.name,
+                style: { color: COLORS.brass },
+                className: "text-[11px] font-mono active:opacity-60 shrink-0"
+              }, "unhide")
+            );
+          })
+        )
       )
     ),
     h("div", null,
