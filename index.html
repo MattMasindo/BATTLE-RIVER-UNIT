@@ -2964,7 +2964,8 @@ function AdvisorView(props) {
     ],
     team: [
       h(TeamFeed, { production: productionLog, roster: scoreRoster, today: date, myCode: myCode, isManager: viewerIsManager,
-        avatarByCode: props.avatarByCode, onLog: props.onLogProduction, onDelete: props.onDeleteProduction }),
+        avatarByCode: props.avatarByCode, onLog: props.onLogProduction, onDelete: props.onDeleteProduction,
+        onSaveAvatar: props.onSaveAvatar }),
       h(SunLifeScoreboard, { production: productionLog, roster: scoreRoster, today: date, myCode: myCode }),
       SHOW_TEAM_ACTIVITY && h("div", null,
       h(SectionTitle, { label: "Team today" }),
@@ -5922,7 +5923,7 @@ function isOneSignalConfigured() {
 }
  
 var APP_NAME = "Unit App";
-var APP_VERSION = "5.13.0-patch23";
+var APP_VERSION = "5.13.0-patch24";
  
 function isSupabaseConfigured() {
   return SUPABASE_URL.indexOf("YOUR-PROJECT") === -1 && SUPABASE_ANON_KEY.indexOf("YOUR-ANON") === -1;
@@ -8639,6 +8640,19 @@ function ProductionComposer(props) {
           roster.map(function (r) { return h("option", { key: r.code, value: r.code }, r.name); })
         )
       ),
+      // Patch 24: set the chosen advisor's photo right here. Same
+      // advisor_avatars write the Manager tools sheet uses, so it shows
+      // everywhere the app draws that advisor.
+      code && props.onSaveAvatar && (function () {
+        var row = roster.filter(function (r) { return r.code === code; })[0];
+        if (!row || !row.id) return null;
+        return h(AvatarPicker, {
+          key: "pic-" + code,
+          src: (props.avatarByCode || {})[code], name: row.name, label: "Photo",
+          hint: "Shows everywhere " + String(row.name).split(" ")[0] + " appears in the app.",
+          onSave: function (url) { return props.onSaveAvatar(row.id, url); }
+        });
+      })(),
       h("div", null,
         h("div", { style: { color: COLORS.slate }, className: "text-[12px] mb-1.5" }, "Lives settled"),
         h("div", { className: "flex items-center gap-3" },
@@ -8714,6 +8728,7 @@ function TeamFeed(props) {
     isManager && (composing !== null
       ? h("div", { className: "px-5 pb-2" }, h(ProductionComposer, {
           key: "c-" + composing, initialCode: composing, roster: roster, today: today, production: rows,
+          avatarByCode: avatars, onSaveAvatar: props.onSaveAvatar,
           onPost: props.onLog, onDelete: props.onDelete, onClose: function () { setComposing(null); } }))
       : h("div", { style: card, className: "px-4 py-3 flex items-center gap-2.5" },
           h(Avatar, { src: avatars[myCode], name: me ? me.name : "Me", size: 40, background: COLORS.line, color: COLORS.ink }),
@@ -8723,7 +8738,7 @@ function TeamFeed(props) {
           }, "Log Sun Life production\u2026"))),
 
     stories.length > 0 && h("div", { style: card, className: "mt-2 py-3" },
-      isManager && h("div", { style: { color: COLORS.slate }, className: "text-[11px] px-4 mb-2" }, "Tap a photo to log their production"),
+      isManager && h("div", { style: { color: COLORS.slate }, className: "text-[11px] px-4 mb-2" }, "Tap a photo to log production or change their photo"),
       h("div", { className: "flex gap-3 overflow-x-auto px-4", style: { scrollbarWidth: "none" } },
         stories.map(function (r) {
           var st = statusOf(r.code), t = st.t, met = st.rank === 2;
@@ -11603,7 +11618,8 @@ function App() {
         myEntriesByDate: myEntries, myRosterRow: myRosterRow, unitMedianPct: unitMedianPct,
         allSubmissions: submissions, scoreRoster: activeRoster,
         productionLog: productionLog, isManager: isManager,
-        onLogProduction: logProduction, onDeleteProduction: deleteProduction
+        onLogProduction: logProduction, onDeleteProduction: deleteProduction,
+        onSaveAvatar: isManager ? saveAvatar : null
       }),
       view === "manager" && isManager && h(ManagerView, {
         date: today, roster: roster, activeRoster: activeRoster, teamEntries: teamEntries, loading: teamLoading, onRefresh: loadTeamData,
