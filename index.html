@@ -1049,10 +1049,16 @@ function SunLifeScoreboard(props) {
         h("div", { className: "space-y-2" },
           byVal.map(function (p) {
             var done = p.y.v.nbac >= SL_VALIDATION_NBAC;
-            return h("div", { key: p.code, style: { display: "grid", gridTemplateColumns: "minmax(0,1fr) 1fr 78px", gap: "8px", alignItems: "center" }, className: "text-[12px]" },
+            // Patch 32: show how much Total AC is still needed to validate.
+            var gap = Math.max(0, SL_VALIDATION_NBAC - p.y.v.nbac);
+            return h("div", { key: p.code, style: { display: "grid", gridTemplateColumns: "minmax(0,1.4fr) minmax(0,0.6fr) 96px", gap: "8px", alignItems: "center" }, className: "text-[12px]" },
               h("span", { className: "min-w-0 flex items-center gap-2" }, nameCell(p)),
               slBar((p.y.v.nbac / SL_VALIDATION_NBAC) * 100, done ? COLORS.good : COLORS.brass),
-              h("span", { style: { color: done ? COLORS.good : COLORS.ink }, className: "font-mono text-right" }, done ? "Validated" : fmtPhp(p.y.v.nbac)));
+              done
+                ? h("span", { style: { color: COLORS.good }, className: "font-mono text-right" }, "Validated")
+                : h("span", { className: "text-right leading-tight" },
+                    h("span", { style: { color: COLORS.ink }, className: "font-mono block" }, fmtPhp(p.y.v.nbac)),
+                    h("span", { style: { color: COLORS.rust }, className: "text-[10px] block" }, fmtPhp(gap) + " to go")));
           })
         )
       ),
@@ -6196,7 +6202,7 @@ function isOneSignalConfigured() {
 }
  
 var APP_NAME = "Unit App";
-var APP_VERSION = "5.13.0-patch31";
+var APP_VERSION = "5.13.0-patch32";
  
 function isSupabaseConfigured() {
   return SUPABASE_URL.indexOf("YOUR-PROJECT") === -1 && SUPABASE_ANON_KEY.indexOf("YOUR-ANON") === -1;
