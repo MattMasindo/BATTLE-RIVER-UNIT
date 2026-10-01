@@ -790,22 +790,39 @@ var SL_MDRT = [
 //   lives = Jul 1 – today   (saved lives total + lives logged after its as-of)
 // A saved total only counts inside the window its as-of date falls in, so
 // in July the old lives total drops away and in January the old NB AC does.
-function slYearTally(prod, baselines, today) {
+// Patch 31: three separately-entered portal totals, each with its own
+// window and its own as-of date (table ytd_totals, kind =
+//   "validation" — Total AC,           Jan 1 – Dec 31
+//   "macaulay"   — settled lives + NB AC, Jul 1 – Jun 30
+//   "mdrt"       — NB AC,              Jan 1 – Dec 31 ).
+// Each figure = its saved total (if its as-of falls in the current
+// window) + production logged AFTER that as-of date inside the window.
+// With no saved total, it's just the production logged in the window.
+function slStandings(prod, totals, today) {
   var yFrom = today.slice(0, 4) + "-01-01", lFrom = slMacaulayYearStart(today);
-  var out = {}, acAsOf = {}, lvAsOf = {};
-  function row(code) { return out[code] || (out[code] = { lives: 0, nbac: 0 }); }
-  (baselines || []).forEach(function (b) {
-    var d = String(b.as_of || "").slice(0, 10);
-    if (!d || d > today) return;
-    if (d >= yFrom) { row(b.advisor_code).nbac = Number(b.nb_ac || 0); acAsOf[b.advisor_code] = d; }
-    if (d >= lFrom) { row(b.advisor_code).lives = Number(b.lives || 0); lvAsOf[b.advisor_code] = d; }
+  var from = { validation: yFrom, macaulay: lFrom, mdrt: yFrom };
+  var base = {}, codes = {};
+  (totals || []).forEach(function (t) {
+    var d = String(t.as_of || "").slice(0, 10);
+    if (!from[t.kind] || !d || d > today || d < from[t.kind]) return;
+    base[t.advisor_code + "|" + t.kind] = { lives: Number(t.lives || 0), nbac: Number(t.amount || 0), asOf: d };
+    codes[t.advisor_code] = true;
   });
-  (prod || []).forEach(function (r) {
-    var d = r && r.recorded_date ? String(r.recorded_date).slice(0, 10) : null;
-    if (!d || d > today) return;
-    var code = r.advisor_code;
-    if (d >= yFrom && !(acAsOf[code] && d <= acAsOf[code])) row(code).nbac += Number(r.nb_ac || 0);
-    if (d >= lFrom && !(lvAsOf[code] && d <= lvAsOf[code])) row(code).lives += Number(r.lives || 0);
+  (prod || []).forEach(function (r) { if (r && r.advisor_code) codes[r.advisor_code] = true; });
+  function acc(code, kind) {
+    var b = base[code + "|" + kind], t = { lives: b ? b.lives : 0, nbac: b ? b.nbac : 0 };
+    (prod || []).forEach(function (r) {
+      if (r.advisor_code !== code) return;
+      var d = r.recorded_date ? String(r.recorded_date).slice(0, 10) : null;
+      if (!d || d > today || d < from[kind] || (b && d <= b.asOf)) return;
+      t.lives += Number(r.lives || 0);
+      t.nbac += Number(r.nb_ac || 0);
+    });
+    return t;
+  }
+  var out = {};
+  Object.keys(codes).forEach(function (code) {
+    out[code] = { v: acc(code, "validation"), mac: acc(code, "macaulay"), md: acc(code, "mdrt") };
   });
   return out;
 }
@@ -923,24 +940,27 @@ function SunLifeScoreboard(props) {
   var prod = props.production || [];
   var month = slTallyLog(prod, monthFrom, today);
   var quarter = slTallyLog(prod, qFrom, today);
-  var year = slYearTally(prod, props.baselines || [], today);
+  var year = slStandings(prod, props.baselines || [], today);
+  var zeroStd = { v: { lives: 0, nbac: 0 }, mac: { lives: 0, nbac: 0 }, md: { lives: 0, nbac: 0 } };
   var zero = { lives: 0, nbac: 0 };
   var monthLabel = SL_MONTHS[parseInt(today.slice(5, 7), 10) - 1];
 
   var people = roster.map(function (r) {
     return {
       code: r.code, name: r.name, isMe: r.code === myCode, isManager: !!r.is_manager,
-      m: month[r.code] || zero, q: quarter[r.code] || zero, y: year[r.code] || zero
+      m: month[r.code] || zero, q: quarter[r.code] || zero, y: year[r.code] || zeroStd
     };
   });
   var byMonth = people.slice().sort(function (a, b) { return (b.m.nbac - a.m.nbac) || (b.m.lives - a.m.lives); });
   var byQuarter = people.slice().sort(function (a, b) { return (b.q.nbac - a.q.nbac) || (b.q.lives - a.q.lives); });
-  var byYear = people.slice().sort(function (a, b) { return b.y.nbac - a.y.nbac; });
+  var byVal = people.slice().sort(function (a, b) { return b.y.v.nbac - a.y.v.nbac; });
+  var byMac = people.slice().sort(function (a, b) { return (b.y.mac.nbac - a.y.mac.nbac) || (b.y.mac.lives - a.y.mac.lives); });
+  var byMd = people.slice().sort(function (a, b) { return b.y.md.nbac - a.y.md.nbac; });
 
   var advisorsAt330 = people.filter(function (p) { return !p.isManager && slRiseMet(p.m); }).length;
   var unitNbac = people.reduce(function (s2, p) { return s2 + p.q.nbac; }, 0);
   var unitTier = slUnitTier(unitNbac), unitNext = slNextUnitTier(unitNbac);
-  var validated = people.filter(function (p) { return p.y.nbac >= SL_VALIDATION_NBAC; }).length;
+  var validated = people.filter(function (p) { return p.y.v.nbac >= SL_VALIDATION_NBAC; }).length;
 
   var card = { background: COLORS.card, borderColor: COLORS.line };
   var head = function (title, sub) {
@@ -1025,33 +1045,33 @@ function SunLifeScoreboard(props) {
 
       // 180K validation — calendar year
       h("div", { style: card, className: "rounded-2xl border p-4" },
-        head("\u20b1180K validation", "Jan\u2013Dec " + today.slice(0, 4) + " \u00b7 " + validated + " of " + people.length),
+        head("\u20b1180K validation", "Total AC \u00b7 Jan\u2013Dec " + today.slice(0, 4) + " \u00b7 " + validated + " of " + people.length),
         h("div", { className: "space-y-2" },
-          byYear.map(function (p) {
-            var done = p.y.nbac >= SL_VALIDATION_NBAC;
+          byVal.map(function (p) {
+            var done = p.y.v.nbac >= SL_VALIDATION_NBAC;
             return h("div", { key: p.code, style: { display: "grid", gridTemplateColumns: "minmax(0,1fr) 1fr 78px", gap: "8px", alignItems: "center" }, className: "text-[12px]" },
               h("span", { className: "min-w-0 flex items-center gap-2" }, nameCell(p)),
-              slBar((p.y.nbac / SL_VALIDATION_NBAC) * 100, done ? COLORS.good : COLORS.brass),
-              h("span", { style: { color: done ? COLORS.good : COLORS.ink }, className: "font-mono text-right" }, done ? "Validated" : fmtPhp(p.y.nbac)));
+              slBar((p.y.v.nbac / SL_VALIDATION_NBAC) * 100, done ? COLORS.good : COLORS.brass),
+              h("span", { style: { color: done ? COLORS.good : COLORS.ink }, className: "font-mono text-right" }, done ? "Validated" : fmtPhp(p.y.v.nbac)));
           })
         )
       ),
 
       // Patch 29: Macaulay standing — calendar year, 36 lives + NB AC
       h("div", { style: card, className: "rounded-2xl border p-4" },
-        head("Macaulay standing", "Lives " + slMacaulayYearLabel(today) + " \u00b7 NB AC Jan\u2013Dec"),
+        head("Macaulay standing", slMacaulayYearLabel(today) + " \u00b7 lives + NB AC"),
         h("div", { style: { display: "grid", gridTemplateColumns: "minmax(0,1fr) 46px 66px 76px", gap: "6px 8px", alignItems: "center" }, className: "text-[12px]" },
           colHead(["Advisor", "Lives", "NB AC", "Tier"]),
-          byYear.map(function (p) {
-            var tier = slMacaulayTier(p.y), next = slMacaulayNext(p.y);
+          byMac.map(function (p) {
+            var tier = slMacaulayTier(p.y.mac), next = slMacaulayNext(p.y.mac);
             return [
               h("span", { key: p.code + "n", className: "min-w-0 flex items-center gap-2" }, nameCell(p)),
-              h("span", { key: p.code + "l", style: { color: p.y.lives >= 36 ? COLORS.good : COLORS.ink }, className: "font-mono" }, p.y.lives + "/36"),
-              h("span", { key: p.code + "a", style: { color: COLORS.ink }, className: "font-mono" }, slShortPhp(p.y.nbac)),
+              h("span", { key: p.code + "l", style: { color: p.y.mac.lives >= 36 ? COLORS.good : COLORS.ink }, className: "font-mono" }, p.y.mac.lives + "/36"),
+              h("span", { key: p.code + "a", style: { color: COLORS.ink }, className: "font-mono" }, slShortPhp(p.y.mac.nbac)),
               h("span", { key: p.code + "t", style: { color: tier ? COLORS.brass : COLORS.slate }, className: "text-[11px] leading-tight" },
                 tier ? (tier === "Senior Vice President" ? "SVP" : tier === "Vice President" ? "VP" : tier)
-                  : (next ? [next.nbac > p.y.nbac ? slShortPhp(next.nbac - p.y.nbac) : null,
-                             next.lives > p.y.lives ? (next.lives - p.y.lives) + " li" + (next.lives - p.y.lives === 1 ? "fe" : "ves") : null]
+                  : (next ? [next.nbac > p.y.mac.nbac ? slShortPhp(next.nbac - p.y.mac.nbac) : null,
+                             next.lives > p.y.mac.lives ? (next.lives - p.y.mac.lives) + " li" + (next.lives - p.y.mac.lives === 1 ? "fe" : "ves") : null]
                             .filter(Boolean).join(" + ") + " to go" : "\u2014"))
             ];
           })
@@ -1064,16 +1084,16 @@ function SunLifeScoreboard(props) {
       h("div", { style: card, className: "rounded-2xl border p-4" },
         head("MDRT standing", "Jan\u2013Dec " + today.slice(0, 4) + " \u00b7 NB AC"),
         h("div", { className: "space-y-2.5" },
-          byYear.map(function (p) {
-            var tier = slMdrtTier(p.y.nbac), next = slMdrtNext(p.y.nbac);
-            var pct = next ? (p.y.nbac / next.nbac) * 100 : 100;
+          byMd.map(function (p) {
+            var tier = slMdrtTier(p.y.md.nbac), next = slMdrtNext(p.y.md.nbac);
+            var pct = next ? (p.y.md.nbac / next.nbac) * 100 : 100;
             return h("div", { key: p.code },
               h("div", { style: { display: "grid", gridTemplateColumns: "minmax(0,1fr) 1fr 70px", gap: "8px", alignItems: "center" }, className: "text-[12px]" },
                 h("span", { className: "min-w-0 flex items-center gap-2" }, nameCell(p)),
                 slBar(pct, tier ? COLORS.good : COLORS.brass),
-                h("span", { style: { color: tier ? COLORS.good : COLORS.ink }, className: "font-mono text-right" }, slShortPhp(p.y.nbac))),
+                h("span", { style: { color: tier ? COLORS.good : COLORS.ink }, className: "font-mono text-right" }, slShortPhp(p.y.md.nbac))),
               h("div", { style: { color: tier ? COLORS.good : COLORS.slate }, className: "text-[10px] mt-0.5 text-right" },
-                (tier ? tier + (next ? " \u00b7 " : "") : "") + (next ? slShortPhp(next.nbac - p.y.nbac) + " to " + next.tier : "")));
+                (tier ? tier + (next ? " \u00b7 " : "") : "") + (next ? slShortPhp(next.nbac - p.y.md.nbac) + " to " + next.tier : "")));
           })
         ),
         h("div", { style: { color: COLORS.slate }, className: "text-[10px] mt-2 leading-relaxed" },
@@ -4360,73 +4380,106 @@ function topTier(awardProgress, advisorCode, awardType) {
 }
  
 // =====================================================================
-// Patch 29 — YtdBaselineSection (Manager tools): the manager types each
-// advisor's Jan-to-date settled lives + NB AC from the Sun Life portal.
-// Validation, Macaulay and MDRT use it, plus production logged after its
-// "as of" date. Saving again replaces the previous figure for that advisor.
+// Patch 31 — YtdBaselineSection (Manager tools): three ways to enter a
+// portal total, each saved on its own with its own as-of date.
+//   Validation  Total AC            Jan 1 to date
+//   Macaulay    settled lives + NB AC Jul 1 to date
+//   MDRT        NB AC               Jan 1 to date
+// Saving again replaces that advisor's previous figure for that kind.
 // =====================================================================
+var YTD_KINDS = [
+  { key: "validation", label: "Validation", from: "Jan 1", fields: [{ k: "amount", label: "Total AC (Jan 1 to date, \u20b1)", dec: true }],
+    note: "Total AC from January 1. Measured against \u20b1180K, Jan\u2013Dec." },
+  { key: "macaulay", label: "Macaulay", from: "Jul 1", fields: [{ k: "lives", label: "Settled lives (Jul 1 to date)", dec: false }, { k: "amount", label: "NB AC (Jul 1 to date, \u20b1)", dec: true }],
+    note: "Settled lives and NB AC from July 1. Macaulay year runs Jul\u2013Jun." },
+  { key: "mdrt", label: "MDRT", from: "Jan 1", fields: [{ k: "amount", label: "NB AC (Jan 1 to date, \u20b1)", dec: true }],
+    note: "NB AC from January 1. MDRT year runs Jan\u2013Dec." }
+];
+
 function YtdBaselineSection(props) {
-  var roster = props.roster || [], baselines = props.baselines || [], today = props.today;
-  var byCode = {};
-  baselines.forEach(function (b) { byCode[b.advisor_code] = b; });
+  var roster = props.roster || [], totals = props.baselines || [], today = props.today;
+  var kindState = useState("validation"); var kind = kindState[0], setKind = kindState[1];
   var codeState = useState(""); var code = codeState[0], setCode = codeState[1];
   var livesState = useState(""); var lives = livesState[0], setLives = livesState[1];
-  var acState = useState(""); var ac = acState[0], setAc = acState[1];
+  var amtState = useState(""); var amt = amtState[0], setAmt = amtState[1];
   var asOfState = useState(today); var asOf = asOfState[0], setAsOf = asOfState[1];
   var errState = useState(null); var err = errState[0], setErr = errState[1];
   var okState = useState(null); var ok = okState[0], setOk = okState[1];
   var busyState = useState(false); var busy = busyState[0], setBusy = busyState[1];
   var inp = { background: COLORS.line, color: COLORS.ink, border: "none" };
+  var K = YTD_KINDS.filter(function (x) { return x.key === kind; })[0];
+  var windowFrom = kind === "macaulay" ? slMacaulayYearStart(today) : today.slice(0, 4) + "-01-01";
+  var byCode = {};
+  totals.forEach(function (t) { if (t.kind === kind) byCode[t.advisor_code] = t; });
 
-  var pick = function (c) {
-    setCode(c); setErr(null); setOk(null);
-    var b = byCode[c];
-    setLives(b ? fmtNumInput(b.lives, false) : ""); setAc(b ? fmtNumInput(Number(b.nb_ac), true) : ""); setAsOf(today);
+  var load = function (c, k) {
+    var row = null;
+    totals.forEach(function (t) { if (t.kind === k && t.advisor_code === c) row = t; });
+    setLives(row && row.lives != null ? fmtNumInput(row.lives, false) : "");
+    setAmt(row && row.amount != null ? fmtNumInput(Number(row.amount), true) : "");
+    setAsOf(today); setErr(null); setOk(null);
   };
+  var pickKind = function (k) { setKind(k); if (code) load(code, k); else { setErr(null); setOk(null); } };
+  var pick = function (c) { setCode(c); load(c, kind); };
+
   var save = async function () {
-    var lv = parseNumInput(lives), nb = parseNumInput(ac);
+    var needLives = kind === "macaulay";
+    var lv = needLives ? parseNumInput(lives) : 0, am = parseNumInput(amt);
     if (!code) { setErr("Choose an advisor."); return; }
-    if (lives === "" || !(lv >= 0) || Math.floor(lv) !== lv) { setErr("Enter settled lives as a whole number."); return; }
-    if (ac === "" || !(nb >= 0) || !isFinite(nb)) { setErr("Enter NB AC in pesos."); return; }
-    if (!asOf || asOf > today || asOf.slice(0, 4) !== today.slice(0, 4)) { setErr("As-of date must be this year and not in the future."); return; }
+    if (needLives && (lives === "" || !(lv >= 0) || Math.floor(lv) !== lv)) { setErr("Enter settled lives as a whole number."); return; }
+    if (amt === "" || !(am >= 0) || !isFinite(am)) { setErr("Enter the amount in pesos."); return; }
+    if (!asOf || asOf > today || asOf < windowFrom) { setErr("As-of date must be between " + shortDate(windowFrom) + " and today."); return; }
     setErr(null); setBusy(true);
-    var res = await props.onSave(code, lv, Math.round(nb * 100) / 100, asOf);
+    var res = await props.onSave(code, kind, lv, Math.round(am * 100) / 100, asOf);
     setBusy(false);
     if (!res || !res.ok) { setErr((res && res.message) || "Couldn't save. Try again."); return; }
-    setOk("Saved."); 
+    setOk(K.label + " total saved.");
   };
 
-  var list = roster.map(function (r) { return { r: r, b: byCode[r.code] }; });
+  function field(f) {
+    var isLives = f.k === "lives";
+    return h("div", { key: f.k, className: "flex-1" },
+      h("div", { style: { color: COLORS.slate }, className: "text-[11px] mb-1" }, f.label),
+      h("input", { type: "text", inputMode: f.dec ? "decimal" : "numeric", value: isLives ? lives : amt, placeholder: "0",
+        onChange: function (ev) { var v = fmtNumInput(ev.target.value, f.dec); if (isLives) setLives(v); else setAmt(v); setErr(null); setOk(null); },
+        style: inp, className: "w-full px-3 py-3 rounded-lg text-[15px] outline-none font-mono" }));
+  }
+
   return h("div", null,
     h(SectionTitle, { label: "Year-to-date totals (Sun Life portal)" }),
     h("div", { style: { color: COLORS.slate }, className: "text-[11px] leading-relaxed mb-2.5" },
-      "From the Sun Life portal: settled lives from July 1 (Macaulay year) and NB AC from January 1, both up to the as-of date. Validation, Macaulay and MDRT use these, plus any production you log after that date."),
+      "Pick what you're entering, then copy the figure from the Sun Life portal. Production you log after the as-of date is added on top."),
     h("div", { style: { background: COLORS.card, borderColor: COLORS.line }, className: "rounded-2xl border p-4 space-y-3" },
+      h("div", { style: { background: COLORS.parchment }, className: "flex rounded-lg p-1 gap-1" },
+        YTD_KINDS.map(function (x) {
+          var on = x.key === kind;
+          return h("button", { key: x.key, type: "button", onClick: function () { pickKind(x.key); },
+            style: { background: on ? COLORS.brass : "transparent", color: on ? "#fff" : COLORS.slate },
+            className: "flex-1 py-2 rounded-md text-[13px] font-semibold" }, x.label);
+        })),
+      h("div", { style: { color: COLORS.slate }, className: "text-[12px]" }, K.note),
       h("select", { value: code, onChange: function (ev) { pick(ev.target.value); }, style: inp, className: "w-full px-3 py-3 rounded-lg text-[15px] outline-none" },
         h("option", { value: "" }, "Choose advisor\u2026"),
         roster.map(function (r) { return h("option", { key: r.code, value: r.code }, r.name); })),
-      h("div", { className: "flex gap-2" },
-        h("div", { className: "flex-1" },
-          h("div", { style: { color: COLORS.slate }, className: "text-[11px] mb-1" }, "Settled lives (Jul 1 to date)"),
-          h("input", { type: "text", inputMode: "numeric", value: lives, placeholder: "0", onChange: function (ev) { setLives(fmtNumInput(ev.target.value, false)); setErr(null); setOk(null); }, style: inp, className: "w-full px-3 py-3 rounded-lg text-[15px] outline-none font-mono" })),
-        h("div", { className: "flex-1" },
-          h("div", { style: { color: COLORS.slate }, className: "text-[11px] mb-1" }, "NB AC (Jan to date, \u20b1)"),
-          h("input", { type: "text", inputMode: "decimal", value: ac, placeholder: "0", onChange: function (ev) { setAc(fmtNumInput(ev.target.value, true)); setErr(null); setOk(null); }, style: inp, className: "w-full px-3 py-3 rounded-lg text-[15px] outline-none font-mono" }))),
+      h("div", { className: "flex gap-2" }, K.fields.map(field)),
       h("div", null,
         h("div", { style: { color: COLORS.slate }, className: "text-[11px] mb-1" }, "As of"),
-        h("input", { type: "date", value: asOf, max: today, onChange: function (ev) { setAsOf(ev.target.value); setErr(null); setOk(null); }, style: inp, className: "w-full px-3 py-3 rounded-lg text-[15px] outline-none font-mono" })),
+        h("input", { type: "date", value: asOf, min: windowFrom, max: today, onChange: function (ev) { setAsOf(ev.target.value); setErr(null); setOk(null); }, style: inp, className: "w-full px-3 py-3 rounded-lg text-[15px] outline-none font-mono" })),
       err && h("div", { style: { color: COLORS.rust }, className: "text-[13px]" }, err),
       ok && h("div", { style: { color: COLORS.good }, className: "text-[13px]" }, ok),
       h("button", { type: "button", onClick: save, disabled: busy, style: { background: COLORS.brass, color: "#fff", opacity: busy ? 0.6 : 1 },
-        className: "w-full py-3 rounded-lg font-semibold text-[15px]" }, busy ? "Saving\u2026" : "Save totals")),
-    h("div", { style: { background: COLORS.card, borderColor: COLORS.line }, className: "rounded-2xl border divide-y mt-2" },
-      list.map(function (x) {
-        return h("button", { key: x.r.code, type: "button", onClick: function () { pick(x.r.code); try { window.scrollBy({ top: -240, behavior: "smooth" }); } catch (e) {} },
+        className: "w-full py-3 rounded-lg font-semibold text-[15px]" }, busy ? "Saving\u2026" : "Save " + K.label + " total")),
+    h("div", { style: { color: COLORS.slate }, className: "text-[11px] mt-3 mb-1.5" }, K.label + " totals on file"),
+    h("div", { style: { background: COLORS.card, borderColor: COLORS.line }, className: "rounded-2xl border divide-y" },
+      roster.map(function (r) {
+        var t = byCode[r.code];
+        var current = t && String(t.as_of).slice(0, 10) >= windowFrom;
+        return h("button", { key: r.code, type: "button", onClick: function () { pick(r.code); try { window.scrollBy({ top: -260, behavior: "smooth" }); } catch (e) {} },
           style: { borderColor: COLORS.line }, className: "w-full px-4 py-2.5 flex items-center justify-between gap-2 text-left" },
-          h("span", { style: { color: COLORS.ink }, className: "text-[13px] truncate" }, x.r.name),
-          x.b
+          h("span", { style: { color: COLORS.ink }, className: "text-[13px] truncate" }, r.name),
+          current
             ? h("span", { style: { color: COLORS.slate }, className: "text-[11px] font-mono shrink-0" },
-                fmtNumInput(x.b.lives, false) + " lives \u00b7 " + fmtPhp(x.b.nb_ac) + " \u00b7 " + shortDate(String(x.b.as_of).slice(0, 10)))
+                (kind === "macaulay" ? fmtNumInput(t.lives, false) + " lives \u00b7 " : "") + fmtPhp(t.amount) + " \u00b7 " + shortDate(String(t.as_of).slice(0, 10)))
             : h("span", { style: { color: COLORS.rust }, className: "text-[11px] shrink-0" }, "Not entered"));
       })));
 }
@@ -6143,7 +6196,7 @@ function isOneSignalConfigured() {
 }
  
 var APP_NAME = "Unit App";
-var APP_VERSION = "5.13.0-patch30";
+var APP_VERSION = "5.13.0-patch31";
  
 function isSupabaseConfigured() {
   return SUPABASE_URL.indexOf("YOUR-PROJECT") === -1 && SUPABASE_ANON_KEY.indexOf("YOUR-ANON") === -1;
@@ -10820,10 +10873,10 @@ function App() {
   };
 
   // Patch 29: manager sets an advisor's Jan-to-date portal totals.
-  var saveBaseline = async function (advisorCode, lives, nbAc, asOf) {
+  var saveBaseline = async function (advisorCode, kind, lives, amount, asOf) {
     try {
       var pin = await requireManagerPin();
-      var res = await sb.rpc("admin_set_ytd_baseline", { p_actor_id: myIdentity.id, p_pin: pin, p_advisor_code: advisorCode, p_lives: lives, p_nb_ac: nbAc, p_as_of: asOf });
+      var res = await sb.rpc("admin_set_ytd_total", { p_actor_id: myIdentity.id, p_pin: pin, p_advisor_code: advisorCode, p_kind: kind, p_lives: lives, p_amount: amount, p_as_of: asOf });
       var d = res.data || {};
       if (res.error || !d.ok) {
         var err = d.error || (res.error && res.error.message) || "";
@@ -10832,8 +10885,8 @@ function App() {
         if (err === "invalid_values") return { ok: false, message: "Check the numbers and the as-of date." };
         return { ok: false, message: "Couldn't save. Try again." };
       }
-      if (d.row) setYtdBaselines(function (prev) { return prev.filter(function (b) { return b.advisor_code !== d.row.advisor_code; }).concat([d.row]); });
-      logEvent("ytd_baseline_saved", advisorCode, { lives: lives, nb_ac: nbAc, as_of: asOf });
+      if (d.row) setYtdBaselines(function (prev) { return prev.filter(function (b) { return !(b.advisor_code === d.row.advisor_code && b.kind === d.row.kind); }).concat([d.row]); });
+      logEvent("ytd_total_saved", advisorCode, { kind: kind, lives: lives, amount: amount, as_of: asOf });
       return { ok: true };
     } catch (e) { return { ok: false, message: "Cancelled." }; }
   };
@@ -10857,7 +10910,7 @@ function App() {
       // Patch 20. Fails soft (empty feed) if the migration hasn't run yet.
       sb.from("production_log").select("*").order("created_at", { ascending: false }),
       // Patch 29. Fails soft (no baselines) if the migration hasn't run yet.
-      sb.from("ytd_baseline").select("*")
+      sb.from("ytd_totals").select("*")
     ]);
     if (!results[3].error) setProductionLog(results[3].data || []);
     if (!results[4].error) setYtdBaselines(results[4].data || []);
