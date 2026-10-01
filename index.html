@@ -759,6 +759,7 @@ var SL_UNIT_MEDALLION = [
   { tier: "Bronze", nbac: 320000 }, { tier: "Silver", nbac: 560000 },
   { tier: "Gold", nbac: 800000 }, { tier: "Platinum", nbac: 1500000 }
 ];
+var SL_RING_ORANGE = "#F5A623";
 var SL_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 // Settled date, falling back to submitted date only for older rows that
@@ -5916,7 +5917,7 @@ function isOneSignalConfigured() {
 }
  
 var APP_NAME = "Unit App";
-var APP_VERSION = "5.13.0-patch21";
+var APP_VERSION = "5.13.0-patch22";
  
 function isSupabaseConfigured() {
   return SUPABASE_URL.indexOf("YOUR-PROJECT") === -1 && SUPABASE_ANON_KEY.indexOf("YOUR-ANON") === -1;
@@ -8681,9 +8682,21 @@ function TeamFeed(props) {
   var openState = useState(null); var composing = openState[0], setComposing = openState[1];
   if (!today) return null;
   var month = slTallyLog(rows, startOfMonth(today), today);
+  var quarter = slTallyLog(rows, slQuarterStart(today), today);
+  // Patch 22: ring colour = status (not progress).
+  //   green  Rise to 3-30 met this month, or any Medallion tier this quarter
+  //   orange some production logged this month
+  //   red    nothing logged this month
+  var statusOf = function (code) {
+    var t = month[code] || { lives: 0, nbac: 0 };
+    var tier = slAdvisorTier(quarter[code] || { lives: 0, nbac: 0 });
+    if (slRiseMet(t) || tier) return { rank: 2, color: COLORS.good, t: t, tier: tier, met: slRiseMet(t) };
+    if (t.lives > 0 || t.nbac > 0) return { rank: 1, color: SL_RING_ORANGE, t: t };
+    return { rank: 0, color: COLORS.rust, t: t };
+  };
   var stories = roster.slice().sort(function (a, b) {
-    var pa = slRingPct(month[a.code]), pb = slRingPct(month[b.code]);
-    return (pb - pa) || String(a.name).localeCompare(String(b.name));
+    var sa = statusOf(a.code), sb2 = statusOf(b.code);
+    return (sb2.rank - sa.rank) || (slRingPct(sb2.t) - slRingPct(sa.t)) || String(a.name).localeCompare(String(b.name));
   });
   var me = roster.filter(function (r) { return r.code === myCode; })[0];
   var card = { background: COLORS.card };
@@ -8708,17 +8721,15 @@ function TeamFeed(props) {
       isManager && h("div", { style: { color: COLORS.slate }, className: "text-[11px] px-4 mb-2" }, "Tap a photo to log their production"),
       h("div", { className: "flex gap-3 overflow-x-auto px-4", style: { scrollbarWidth: "none" } },
         stories.map(function (r) {
-          var t = month[r.code] || { lives: 0, nbac: 0 };
-          var met = slRiseMet(t), pct = slRingPct(t);
-          var ring = met ? COLORS.good : COLORS.brass;
+          var st = statusOf(r.code), t = st.t, met = st.rank === 2;
           var inner = [
             h("div", { key: "ring", style: { width: "64px", height: "64px", borderRadius: "50%", margin: "0 auto", padding: "3px",
-              background: "conic-gradient(" + ring + " " + pct + "%, " + COLORS.line + " 0)" } },
+              background: st.color } },
               h("div", { style: { width: "58px", height: "58px", borderRadius: "50%", background: COLORS.card, padding: "2px" } },
                 h(Avatar, { src: avatars[r.code], name: r.name, size: 54, background: COLORS.line, color: COLORS.ink }))),
             h("div", { key: "nm", style: { color: COLORS.ink }, className: "text-[11px] mt-1 truncate" }, r.code === myCode ? "You" : String(r.name).split(" ")[0]),
             h("div", { key: "st", style: { color: met ? COLORS.good : COLORS.slate }, className: "text-[10px] font-mono" },
-              met ? "3-30 \u2713" : (Math.min(t.lives, 99) + "/3 \u00b7 \u20b1" + Math.round(t.nbac / 1000) + "K"))
+              st.met ? "3-30 \u2713" : st.tier ? (st.tier + " \u2713") : (Math.min(t.lives, 99) + "/3 \u00b7 \u20b1" + Math.round(t.nbac / 1000) + "K"))
           ];
           return isManager
             ? h("button", { key: r.code, type: "button", onClick: function () { open(r.code); },
