@@ -4124,6 +4124,32 @@ function OnePagerView(props) {
   var shareBusyState = useState(false); var shareBusy = shareBusyState[0], setShareBusy = shareBusyState[1];
   var toastState = useState(null); var toast = toastState[0], setToast = toastState[1];
   var stageRef = useRef(null);
+  // Patch 33: fit-to-screen preview. The document stays its real 1000px
+  // design (so the exported image is unchanged); only the on-screen copy
+  // is scaled down to the width available, on phone and desktop alike.
+  var previewBoxRef = useRef(null);
+  var fitState = useState({ boxW: 0, docW: 1000, docH: 0 }); var fit = fitState[0], setFit = fitState[1];
+  useEffect(function () {
+    var box = previewBoxRef.current, doc = stageRef.current;
+    if (!box || !doc) return;
+    function measure() {
+      var cs = window.getComputedStyle(box);
+      var inner = box.clientWidth - parseFloat(cs.paddingLeft || 0) - parseFloat(cs.paddingRight || 0);
+      var next = { boxW: Math.max(0, inner), docW: doc.offsetWidth || 1000, docH: doc.offsetHeight || 0 };
+      setFit(function (prev) {
+        return (prev.boxW === next.boxW && prev.docW === next.docW && prev.docH === next.docH) ? prev : next;
+      });
+    }
+    measure();
+    var ro = null;
+    if (typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(measure);
+      ro.observe(box); ro.observe(doc);
+    }
+    window.addEventListener("resize", measure);
+    return function () { if (ro) ro.disconnect(); window.removeEventListener("resize", measure); };
+  }, [mode]);
+  var fitScale = fit.boxW > 0 ? Math.min(1, fit.boxW / fit.docW) : 1;
 
   function flash(msg) {
     setToast(msg);
@@ -4195,7 +4221,17 @@ function OnePagerView(props) {
       if (!node) { resolve(null); return; }
       var mime = format === "jpeg" ? "image/jpeg" : "image/png";
       var doCapture = function () {
-        window.html2canvas(node, { scale: 2, backgroundColor: "#ffffff", useCORS: true }).then(function (canvas) {
+        // Patch 33: capture at full size regardless of the on-screen fit.
+        // offsetWidth/Height ignore the preview's transform, and onclone
+        // removes the scale in html2canvas's copy of the page.
+        window.html2canvas(node, {
+          scale: 2, backgroundColor: "#ffffff", useCORS: true,
+          width: node.offsetWidth, height: node.offsetHeight,
+          onclone: function (doc) {
+            var w = doc.querySelector("[data-op-fit]");
+            if (w) { w.style.transform = "none"; }
+          }
+        }).then(function (canvas) {
           canvas.toBlob(function (blob) { resolve(blob); }, mime, 0.95);
         }).catch(function () { resolve(null); });
       };
@@ -4276,13 +4312,17 @@ function OnePagerView(props) {
     ),
 
     h("div", { style: { color: COLORS.slate }, className: "text-[11px] font-mono uppercase tracking-wide mb-2.5" }, "Preview"),
-    h("div", { className: "mb-5 rounded-2xl", style: { overflowX: "auto", background: COLORS.line, padding: "14px" } },
-      h("div", {
-        ref: stageRef,
-        className: "bru-onepager" + ((mode === "list" || mode === "desc" || mode === "maxilink") ? " op-brudoc" : ""),
-        style: { margin: "0 auto" }
-      },
-        h(OnePagerStage, { mode: mode, s: s, preparedBy: preparedBy, avatarSrc: avatarSrc })
+    h("div", { ref: previewBoxRef, className: "mb-5 rounded-2xl", style: { overflow: "hidden", background: COLORS.line, padding: "10px" } },
+      h("div", { style: { width: Math.round(fit.docW * fitScale) + "px", height: fit.docH ? Math.round(fit.docH * fitScale) + "px" : "auto", margin: "0 auto" } },
+        h("div", { "data-op-fit": "1", style: { width: fit.docW + "px", transform: "scale(" + fitScale + ")", transformOrigin: "top left" } },
+          h("div", {
+            ref: stageRef,
+            className: "bru-onepager" + ((mode === "list" || mode === "desc" || mode === "maxilink") ? " op-brudoc" : ""),
+            style: { margin: "0 auto" }
+          },
+            h(OnePagerStage, { mode: mode, s: s, preparedBy: preparedBy, avatarSrc: avatarSrc })
+          )
+        )
       )
     ),
 
@@ -6202,7 +6242,7 @@ function isOneSignalConfigured() {
 }
  
 var APP_NAME = "Unit App";
-var APP_VERSION = "5.13.0-patch32";
+var APP_VERSION = "5.13.0-patch33";
  
 function isSupabaseConfigured() {
   return SUPABASE_URL.indexOf("YOUR-PROJECT") === -1 && SUPABASE_ANON_KEY.indexOf("YOUR-ANON") === -1;
