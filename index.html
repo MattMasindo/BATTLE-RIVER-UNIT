@@ -732,6 +732,11 @@ var SHOW_INCENTIVES = false;
 // Patch 20: old FYP/NB AC submissions no longer feed the scoreboard; the
 // manager's per-policy Add Submission form is replaced by Log production.
 var SHOW_LEGACY_SUBMISSION_FORM = false;
+// Patch 23: Team tab shows Sun Life measures only. Team today, Today's
+// funnel, This week's leaderboard and the 7-day trend are hidden (not
+// deleted) — set true to bring them back. Activity logging itself
+// (Daily Log, bump_metric) is untouched.
+var SHOW_TEAM_ACTIVITY = false;
 
 // Production log (Patch 20): one row = what the manager copied from the
 // Sun Life portal for one advisor — lives settled + NB AC settled — dated
@@ -2961,7 +2966,7 @@ function AdvisorView(props) {
       h(TeamFeed, { production: productionLog, roster: scoreRoster, today: date, myCode: myCode, isManager: viewerIsManager,
         avatarByCode: props.avatarByCode, onLog: props.onLogProduction, onDelete: props.onDeleteProduction }),
       h(SunLifeScoreboard, { production: productionLog, roster: scoreRoster, today: date, myCode: myCode }),
-      h("div", null,
+      SHOW_TEAM_ACTIVITY && h("div", null,
       h(SectionTitle, { label: "Team today" }),
       h("div", { className: "grid grid-cols-2 gap-3" },
         METRICS.map(function (m) {
@@ -2974,7 +2979,7 @@ function AdvisorView(props) {
       h("div", { style: { background: COLORS.emphasis }, className: "rounded-2xl px-4 py-3 text-white text-sm mt-3" }, socialToday + " advisor" + (socialToday !== 1 ? "s" : "") + " posted on social media today")
     ),
  
-      h("div", null,
+      SHOW_TEAM_ACTIVITY && h("div", null,
       h(SectionTitle, { label: "Today's funnel" }),
       h("div", { style: { background: COLORS.card, borderColor: COLORS.line }, className: "rounded-2xl border p-4 space-y-2.5" },
         funnelData.map(function (f) {
@@ -2989,7 +2994,7 @@ function AdvisorView(props) {
       )
     ),
  
-      h("div", null,
+      SHOW_TEAM_ACTIVITY && h("div", null,
       h(SectionTitle, { label: "This week's leaderboard" }),
       leaderboard.length === 0
         ? (loading && !hasTeamData
@@ -3010,7 +3015,7 @@ function AdvisorView(props) {
           )
     ),
  
-      h("div", null,
+      SHOW_TEAM_ACTIVITY && h("div", null,
       h(SectionTitle, { label: "7-day trend \u2014 team totals" }),
       h("div", { style: { background: COLORS.card, borderColor: COLORS.line }, className: "rounded-2xl border p-4" },
         h(TrendChart, { data: trendData }),
@@ -5917,7 +5922,7 @@ function isOneSignalConfigured() {
 }
  
 var APP_NAME = "Unit App";
-var APP_VERSION = "5.13.0-patch22";
+var APP_VERSION = "5.13.0-patch23";
  
 function isSupabaseConfigured() {
   return SUPABASE_URL.indexOf("YOUR-PROJECT") === -1 && SUPABASE_ANON_KEY.indexOf("YOUR-ANON") === -1;
@@ -8866,7 +8871,7 @@ function MoreView(props) {
       }),
       h(MoreRow, {
         glyph: "\u2261", label: "Team",
-        hint: "Sun Life scoreboard, leaderboard and the unit's activity",
+        hint: "Sun Life scoreboard and production",
         onClick: function () { props.onGo("team"); }
       }),
       // Patch 18: swapped out of the bottom tab bar for Underwriting
