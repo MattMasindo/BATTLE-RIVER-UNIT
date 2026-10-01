@@ -5928,7 +5928,7 @@ function isOneSignalConfigured() {
 }
  
 var APP_NAME = "Unit App";
-var APP_VERSION = "5.13.0-patch25";
+var APP_VERSION = "5.13.0-patch26";
  
 function isSupabaseConfigured() {
   return SUPABASE_URL.indexOf("YOUR-PROJECT") === -1 && SUPABASE_ANON_KEY.indexOf("YOUR-ANON") === -1;
@@ -7541,6 +7541,49 @@ function CloseBtn(props) {
 // against their own history: no rank, no unit average, nobody else's
 // numbers. That is the whole point of it for the bottom half of a
 // five-person board, who get nothing from a leaderboard.
+// =====================================================================
+// Patch 26 — ActivityRings: the same photo row as the Team tab, on Chats,
+// but measuring today's activity. Two states only:
+//   green   done for today = the Daily Log's "full funnel day"
+//           (1+ new prospect, 1+ chat script use, posted on social)
+//   dimmed  not done (yet)
+// =====================================================================
+function activityDone(e) {
+  return !!e && (e.prospecting || 0) >= 1 && (e.approaching || 0) >= 1 && !!e.social;
+}
+
+function ActivityRings(props) {
+  var data = props.data;
+  if (!data || !data.roster || !data.roster.length) return null;
+  var byCode = {};
+  (data.entries || []).forEach(function (e) { byCode[e.advisor_code] = e; });
+  if (data.myCode && data.myEntry) byCode[data.myCode] = data.myEntry;
+  var avatars = data.avatarByCode || {};
+  var people = data.roster.map(function (r) {
+    var e = byCode[r.code];
+    var steps = e ? [(e.prospecting || 0) >= 1, (e.approaching || 0) >= 1, !!e.social].filter(Boolean).length : 0;
+    return { r: r, done: activityDone(e), steps: steps };
+  }).sort(function (a, b) { return (b.done - a.done) || (b.steps - a.steps) || String(a.r.name).localeCompare(String(b.r.name)); });
+  var doneCount = people.filter(function (p) { return p.done; }).length;
+
+  return h("div", { style: { background: COLORS.card }, className: "-mx-5 mb-5 py-3" },
+    h("div", { className: "flex items-baseline justify-between px-4 mb-2" },
+      h("div", { style: { color: COLORS.slate }, className: "text-[11px]" }, "Today's activity \u00b7 prospect + script + social"),
+      h("div", { style: { color: doneCount ? COLORS.good : COLORS.slate }, className: "text-[11px] font-mono" }, doneCount + "/" + people.length + " done")),
+    h("div", { className: "flex gap-3 overflow-x-auto px-4", style: { scrollbarWidth: "none" } },
+      people.map(function (p) {
+        var r = p.r;
+        return h("div", { key: r.code, className: "shrink-0 text-center", style: { width: "68px", opacity: p.done ? 1 : 0.45 } },
+          h("div", { style: { width: "64px", height: "64px", borderRadius: "50%", margin: "0 auto", padding: "3px",
+            background: p.done ? COLORS.good : COLORS.line } },
+            h("div", { style: { width: "58px", height: "58px", borderRadius: "50%", background: COLORS.card, padding: "2px",
+              filter: p.done ? "none" : "grayscale(1)" } },
+              h(Avatar, { src: avatars[r.code], name: r.name, size: 54, background: COLORS.line, color: COLORS.ink }))),
+          h("div", { style: { color: COLORS.ink }, className: "text-[11px] mt-1 truncate" }, r.code === data.myCode ? "You" : String(r.name).split(" ")[0]),
+          h("div", { style: { color: p.done ? COLORS.good : COLORS.slate }, className: "text-[10px] font-mono" }, p.done ? "Done \u2713" : p.steps + "/3"));
+      })));
+}
+
 function RecapCard(props) {
   var r = props.recap && props.recap.data;
   if (!props.recap || !props.recap.open || !r) return null;
@@ -7648,6 +7691,8 @@ function HomeScreen(props) {
   // underneath the first one.
   return h("div", { className: "max-w-md mx-auto px-5 pt-5 pb-16" },
  
+    h(ActivityRings, { data: props.activityRings }),
+
     h(RecapCard, { recap: props.recap }),
  
     h(DigestCard, { digest: props.digest }),
@@ -10353,7 +10398,8 @@ function ScriptSection(props) {
         onQuickAdd: openQuickAdd,
         onAddAdvisor: props.onAddAdvisor,
         digest: props.digest,
-        recap: props.recap
+        recap: props.recap,
+        activityRings: props.activityRings
       }),
       overlays
     );
@@ -10390,6 +10436,7 @@ function App() {
   // Bumping this is what tells the tree to read it again.
   var scriptTickState = useState(0); var scriptTick = scriptTickState[0], setScriptTick = scriptTickState[1];
   var isManagerState = useState(!!lget("is-manager")); var isManager = isManagerState[0], setIsManager = isManagerState[1];
+  var chatsEntriesState = useState([]); var chatsEntries = chatsEntriesState[0], setChatsEntries = chatsEntriesState[1];
   var productionLogState = useState([]); var productionLog = productionLogState[0], setProductionLog = productionLogState[1];
   // The manager's PIN itself, kept ONLY in memory (never localStorage,
   // never persisted) — cleared on every page reload by design. Every
@@ -10683,6 +10730,17 @@ function App() {
     // eslint-disable-next-line
   }, []);
  
+  // Patch 26: today's entries for the Chats activity rings. Small, and
+  // re-read each time Chats is opened so the rings are current.
+  useEffect(function () {
+    if (view !== "chats" || !myIdentity) return;
+    var cancelled = false;
+    sb.from("entries").select("advisor_code,entry_date,prospecting,approaching,social").eq("entry_date", todayStr())
+      .then(function (res) { if (!cancelled && !res.error) setChatsEntries(res.data || []); }, function () {});
+    return function () { cancelled = true; };
+    // eslint-disable-next-line
+  }, [view, myIdentity && myIdentity.id]);
+
   // One fetch when entering the data-backed area — not once per tab tap.
   var dataScope = (isAdvisorTab || view === "manager") ? "team" : "none";
   useEffect(function () {
@@ -11553,6 +11611,10 @@ function App() {
           },
           recap: {
             open: recapOpen, data: weeklyRecap, onDismiss: dismissRecap
+          },
+          activityRings: {
+            roster: activeRoster, entries: chatsEntries, myCode: myCode,
+            myEntry: myTodayEntry, avatarByCode: avatarByCode
           },
           onBack: goBackOne,
           onOpenQuickAdd: function () { navigate({ sheet: "quickadd" }, true); },
