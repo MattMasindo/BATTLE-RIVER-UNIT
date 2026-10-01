@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<meta name="theme-color" content="#0F131B" />
+<meta name="theme-color" content="#242526" />
 <meta name="description" content="Battle River Unit — chat selling script, activity tracking, leaderboards and awards in one app." />
  
 <!-- Add to Home Screen. The linked manifest is not optional: iOS 16.4+
@@ -49,7 +49,7 @@
     --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo,
                  Consolas, "Liberation Mono", monospace;
   }
-  body { font-family: var(--font-ui); background: #0F131B; -webkit-tap-highlight-color: transparent; }
+  body { font-family: var(--font-ui); background: #18191A; -webkit-tap-highlight-color: transparent; }
   /* Space Grotesk was only loaded at 500+, so headings never rendered at
      400. Pinning 600 here keeps the same heading weight now that the
      family is the system UI face, which does ship a 400. */
@@ -229,9 +229,11 @@ var supabaseClient = sb;
 // rewriting every style object — the script screens re-theme wholesale
 // and stay diffable against their pre-merge source.
 var COLORS = {
-  ink: "#EDEFF5", inkLight: "#2DD4BF", parchment: "#0F131B", card: "#171D29",
-  brass: "#F2B705", brassLight: "#F7CB55", slate: "#8891A6", rust: "#E24B4A",
-  line: "#2A3244", good: "#2DD4BF", emphasis: "#FF6A3D"
+  // Patch 20: Facebook dark-mode palette. Accent (brass/emphasis) is the
+  // familiar blue, surfaces are FB's grays, red is the notification red.
+  ink: "#E4E6EB", inkLight: "#4599FF", parchment: "#18191A", card: "#242526",
+  brass: "#2D88FF", brassLight: "#4599FF", slate: "#B0B3B8", rust: "#E41E3F",
+  line: "#3A3B3C", good: "#45BD62", emphasis: "#1877F2"
 };
  
 // SVG text and a couple of inline styles can't use the .font-mono class,
@@ -242,10 +244,10 @@ var MONO_STACK = 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Lib
 var C = {
   bg: COLORS.parchment,
   surface: COLORS.card,
-  surfaceAlt: "#202839",
+  surfaceAlt: "#3A3B3C",   // Patch 20: FB hover gray
   gold: COLORS.brass,
   goldSoft: COLORS.brassLight,
-  goldDim: "#5A4708",
+  goldDim: "#1D3A5F",      // Patch 20: dim blue for note borders
   text: COLORS.ink,
   muted: COLORS.slate,
   line: COLORS.line,
@@ -727,6 +729,24 @@ var LANE_AMOUNTS = { pipeline: 300, grind: 500, grosser: 700 };
 // 3-30/Brass lives on submission date and from regular-pay only).
 // =====================================================================
 var SHOW_INCENTIVES = false;
+// Patch 20: old FYP/NB AC submissions no longer feed the scoreboard; the
+// manager's per-policy Add Submission form is replaced by Log production.
+var SHOW_LEGACY_SUBMISSION_FORM = false;
+
+// Production log (Patch 20): one row = what the manager copied from the
+// Sun Life portal for one advisor — lives settled + NB AC settled — dated
+// by the day it was recorded in the app.
+function slTallyLog(rows, from, to) {
+  var out = {};
+  (rows || []).forEach(function (r) {
+    var d = r && r.recorded_date ? String(r.recorded_date).slice(0, 10) : null;
+    if (!d || d < from || d > to) return;
+    var t = out[r.advisor_code] || (out[r.advisor_code] = { lives: 0, nbac: 0 });
+    t.lives += Number(r.lives || 0);
+    t.nbac += Number(r.nb_ac || 0);
+  });
+  return out;
+}
 
 var SL_RISE = { lives: 3, nbac: 30000 };
 var SL_VALIDATION_NBAC = 180000;
@@ -803,9 +823,10 @@ function SunLifeScoreboard(props) {
   var monthFrom = startOfMonth(today);
   var qFrom = slQuarterStart(today);
   var yFrom = today.slice(0, 4) + "-01-01";
-  var month = slTally(subs, monthFrom, today);
-  var quarter = slTally(subs, qFrom, today);
-  var year = slTally(subs, yFrom, today);
+  var prod = props.production || [];
+  var month = slTallyLog(prod, monthFrom, today);
+  var quarter = slTallyLog(prod, qFrom, today);
+  var year = slTallyLog(prod, yFrom, today);
   var zero = { lives: 0, nbac: 0 };
   var monthLabel = SL_MONTHS[parseInt(today.slice(5, 7), 10) - 1];
 
@@ -838,9 +859,9 @@ function SunLifeScoreboard(props) {
   };
 
   return h("div", null,
-    h(SectionTitle, { label: "Sun Life scoreboard" }),
+    h(SectionTitle, { label: "Scoreboard" }),
     h("div", { style: { color: COLORS.slate }, className: "text-[11px] leading-relaxed mb-2.5" },
-      "BRU count from settled policies entered from the Sun Life portal. One settled application = one life; lives and NB AC count on the settlement date."),
+      "BRU count from production logged from the Sun Life portal. Lives and NB AC count in the month they are recorded."),
 
     h("div", { className: "space-y-3" },
       // Rise to 3-30 — every calendar month
@@ -1489,8 +1510,7 @@ function BottomNav(props) {
     style: {
       background: COLORS.card,
       borderTop: "1px solid " + COLORS.line,
-      paddingBottom: "env(safe-area-inset-bottom)",
-      boxShadow: "0 -8px 24px rgba(0,0,0,0.28)"
+      paddingBottom: "env(safe-area-inset-bottom)"
     }
   },
     h("div", { className: "max-w-md mx-auto flex" },
@@ -1502,8 +1522,8 @@ function BottomNav(props) {
           onClick: function () { onSelect(t.key); },
           "aria-current": on ? "page" : undefined,
           "aria-label": t.label + (on ? " (current tab \u2014 tap again to scroll to top)" : ""),
-          style: { color: on ? COLORS.brass : COLORS.slate },
-          className: "flex-1 pt-2 pb-1.5 flex flex-col items-center gap-0.5 active:scale-95 transition-transform"
+          style: { color: on ? COLORS.brass : COLORS.slate, boxShadow: on ? "inset 0 3px 0 " + COLORS.brass : "none" },
+          className: "flex-1 pt-3 pb-2.5 flex flex-col items-center active:scale-95 transition-transform"
         },
           h("span", { style: { position: "relative", display: "block" } },
             h(NavIcon, { name: t.icon, color: on ? COLORS.brass : COLORS.slate }),
@@ -1512,7 +1532,7 @@ function BottomNav(props) {
               className: "absolute h-[15px] px-1 rounded-full text-[9px] font-mono font-semibold flex items-center justify-center"
             }, t.badge > 99 ? "99+" : String(t.badge))
           ),
-          h("span", { className: "text-[9.5px] font-mono tracking-wide" }, t.label)
+          h("span", { className: "sr-only" }, t.label)
         );
       })
     )
@@ -1525,7 +1545,7 @@ function AppHeader(props) {
   // below the status bar / Dynamic Island. Content stays left-aligned on
   // purpose — the island is centred, so a centred lockup is exactly what
   // gets crowded.
-  return h("header", { style: { background: COLORS.card }, className: "px-4 safe-top pb-4 rounded-b-3xl" },
+  return h("header", { style: { background: COLORS.card, borderBottom: "1px solid " + COLORS.line }, className: "px-4 safe-top pb-3" },
     h("div", { className: "flex items-center gap-3" },
       h("button", {
         type: "button",
@@ -2670,7 +2690,8 @@ function AdvisorView(props) {
     myEntriesByDate = props.myEntriesByDate || {}, myRosterRow = props.myRosterRow || null,
     unitMedianPct = props.unitMedianPct,
     // Patch 19: team-wide inputs for the Sun Life scoreboard.
-    allSubmissions = props.allSubmissions || [], scoreRoster = props.scoreRoster || [];
+    allSubmissions = props.allSubmissions || [], scoreRoster = props.scoreRoster || [],
+    productionLog = props.productionLog || [], viewerIsManager = !!props.isManager;
  
   // RULE 12: a half-typed candidate name survives a tab switch, a back
   // gesture, or an accidental reload. Cleared only on a successful save.
@@ -2866,7 +2887,7 @@ function AdvisorView(props) {
           BADGE_LEVELS.map(function (n) {
             var earned = bestStreak >= n;
             var toGo = Math.max(0, n - currentStreak);
-            return h("div", { key: n, style: { background: earned ? "rgba(242,183,5,0.14)" : COLORS.parchment, borderColor: earned ? COLORS.brass : COLORS.line }, className: "rounded-xl border py-2.5 text-center flex flex-col items-center gap-1" },
+            return h("div", { key: n, style: { background: earned ? "rgba(45,136,255,0.14)" : COLORS.parchment, borderColor: earned ? COLORS.brass : COLORS.line }, className: "rounded-xl border py-2.5 text-center flex flex-col items-center gap-1" },
               h(MedalIcon, { earned: earned }),
               h("div", { style: { color: earned ? COLORS.brass : COLORS.ink }, className: "font-display text-sm" }, n + "-Day"),
               h("div", { style: { color: earned ? COLORS.brass : COLORS.slate }, className: "text-[9px]" }, earned ? "Earned" : toGo + " to go")
@@ -2936,7 +2957,9 @@ function AdvisorView(props) {
     )
     ],
     team: [
-      h(SunLifeScoreboard, { submissions: allSubmissions, roster: scoreRoster, today: date, myCode: myCode }),
+      h(TeamFeed, { production: productionLog, roster: scoreRoster, today: date, myCode: myCode, isManager: viewerIsManager,
+        avatarByCode: props.avatarByCode, onLog: props.onLogProduction, onDelete: props.onDeleteProduction }),
+      h(SunLifeScoreboard, { production: productionLog, roster: scoreRoster, today: date, myCode: myCode }),
       h("div", null,
       h(SectionTitle, { label: "Team today" }),
       h("div", { className: "grid grid-cols-2 gap-3" },
@@ -3067,7 +3090,7 @@ function AdvisorView(props) {
                 h("div", { style: { color: COLORS.ink }, className: "font-display text-2xl mt-0.5" }, fmt(mineVal))
               ),
               leading
-                ? h("span", { style: { background: "rgba(242,183,5,0.14)", color: COLORS.brass }, className: "text-[10px] font-semibold px-2 py-1 rounded-lg" }, "Leading")
+                ? h("span", { style: { background: "rgba(45,136,255,0.14)", color: COLORS.brass }, className: "text-[10px] font-semibold px-2 py-1 rounded-lg" }, "Leading")
                 : leadingButUnqualified
                   ? h("span", { style: { background: "rgba(214,90,60,0.14)", color: COLORS.rust }, className: "text-[10px] font-semibold px-2 py-1 rounded-lg" }, "#1 \u2014 needs " + min + " to qualify")
                   : h("span", { style: { color: COLORS.slate }, className: "text-[11px] font-mono" }, "leader " + fmt(leaderVal))
@@ -3162,7 +3185,7 @@ function AdvisorView(props) {
                 h("div", { style: { color: COLORS.slate }, className: "text-[11px] mt-0.5" },
                   r._pending ? "Saving\u2026" : (referralStatus(r) + (days !== null ? " \u00b7 day " + days : "")))
               ),
-              h("div", { style: { background: "rgba(242,183,5,0.14)", color: COLORS.brass }, className: "font-display text-lg px-3 py-1 rounded-xl" }, fmtPhp(referralPayout(r)))
+              h("div", { style: { background: "rgba(45,136,255,0.14)", color: COLORS.brass }, className: "font-display text-lg px-3 py-1 rounded-xl" }, fmtPhp(referralPayout(r)))
             );
           }),
           refInc.sentinel
@@ -3493,7 +3516,7 @@ function OnePagerMaxilinkFields(props) {
         return h("button", {
           key: name, type: "button",
           onClick: function () { props.addArrItem("riders", { name: name, value: "" }); },
-          style: { borderColor: COLORS.line, color: COLORS.brass, background: "rgba(242,183,5,0.08)" },
+          style: { borderColor: COLORS.line, color: COLORS.brass, background: "rgba(45,136,255,0.08)" },
           className: "px-2.5 py-1.5 rounded-lg border text-[11px] font-semibold active:scale-95 transition-transform"
         }, "+ " + name);
       })
@@ -4629,7 +4652,7 @@ function ManagerView(props) {
         );
       })()
     ),
-    h("div", null,
+    SHOW_LEGACY_SUBMISSION_FORM && h("div", null,
       h(SectionTitle, { label: "Add Submission (Manager)" }),
       h("div", { className: "flex items-center justify-between mb-2" },
         h("div", { style: { color: COLORS.slate }, className: "text-[11px] leading-relaxed" },
@@ -5231,7 +5254,7 @@ function RecruitmentView(props) {
           h("div", { style: { color: COLORS.slate }, className: "text-[11px] uppercase tracking-wide font-mono" }, "Weighted score"),
           h("div", { style: { color: COLORS.brass }, className: "font-display text-3xl mt-1" }, Math.round(score) + "%")
         ),
-        h("div", { style: { background: "rgba(242,183,5,0.14)", color: COLORS.brass }, className: "text-[11px] font-semibold px-2.5 py-1.5 rounded-lg text-right" }, tier.level + " \u2014 " + tier.label)
+        h("div", { style: { background: "rgba(45,136,255,0.14)", color: COLORS.brass }, className: "text-[11px] font-semibold px-2.5 py-1.5 rounded-lg text-right" }, tier.level + " \u2014 " + tier.label)
       )
     ),
  
@@ -5893,7 +5916,7 @@ function isOneSignalConfigured() {
 }
  
 var APP_NAME = "Unit App";
-var APP_VERSION = "5.13.0-patch19";
+var APP_VERSION = "5.13.0-patch20";
  
 function isSupabaseConfigured() {
   return SUPABASE_URL.indexOf("YOUR-PROJECT") === -1 && SUPABASE_ANON_KEY.indexOf("YOUR-ANON") === -1;
@@ -7511,7 +7534,7 @@ function RecapCard(props) {
   if (!props.recap || !props.recap.open || !r) return null;
 
   return h("div", {
-    style: { background: "rgba(242,183,5,0.10)", borderColor: C.gold },
+    style: { background: "rgba(45,136,255,0.10)", borderColor: C.gold },
     className: "rounded-2xl border p-4 mb-6"
   },
     h("div", { style: { color: C.gold }, className: "text-[11px] uppercase tracking-wide font-mono mb-0.5" },
@@ -8520,6 +8543,198 @@ async function pushAvatar(advisorId, dataUrl) {
 // One circle, used everywhere an advisor appears. Falls back to initials,
 // which is what the app did before photos existed, so an advisor who
 // never sets one loses nothing.
+// =====================================================================
+// Patch 20 — TeamFeed: the Team tab laid out like a Facebook home feed.
+//   composer   "Log Sun Life production…" (manager only)
+//   stories    one ring per advisor = this month's Rise to 3-30 progress
+//   posts      every production entry + the milestones it caused
+// Milestones are derived from the log in recorded order, so deleting a
+// mistaken entry also removes any milestone it produced.
+// =====================================================================
+function slRingPct(t) {
+  t = t || { lives: 0, nbac: 0 };
+  return Math.round(((Math.min(t.lives / SL_RISE.lives, 1) + Math.min(t.nbac / SL_RISE.nbac, 1)) / 2) * 100);
+}
+
+function feedTimeLabel(row) {
+  var ts = row.created_at ? new Date(row.created_at) : null;
+  if (!ts || isNaN(ts.getTime())) return shortDate(String(row.recorded_date).slice(0, 10));
+  var mins = Math.floor((Date.now() - ts.getTime()) / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return mins + "m";
+  if (mins < 1440) return Math.floor(mins / 60) + "h";
+  return ts.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + " at " +
+    ts.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
+function buildFeedPosts(rows) {
+  var ordered = (rows || []).slice().sort(function (a, b) {
+    var ka = (a.created_at || a.recorded_date || "") + "|" + a.id, kb = (b.created_at || b.recorded_date || "") + "|" + b.id;
+    return ka < kb ? -1 : ka > kb ? 1 : 0;
+  });
+  var runM = {}, runQ = {}, runY = {}, posts = [];
+  ordered.forEach(function (r) {
+    var d = String(r.recorded_date || "").slice(0, 10);
+    if (!d) return;
+    var code = r.advisor_code;
+    var mk = code + "|" + d.slice(0, 7), qk = code + "|" + slQuarterStart(d), yk = code + "|" + d.slice(0, 4);
+    var m0 = runM[mk] || { lives: 0, nbac: 0 }, q0 = runQ[qk] || { lives: 0, nbac: 0 }, y0 = runY[yk] || { lives: 0, nbac: 0 };
+    var add = { lives: Number(r.lives || 0), nbac: Number(r.nb_ac || 0) };
+    var m1 = { lives: m0.lives + add.lives, nbac: m0.nbac + add.nbac };
+    var q1 = { lives: q0.lives + add.lives, nbac: q0.nbac + add.nbac };
+    var y1 = { lives: y0.lives + add.lives, nbac: y0.nbac + add.nbac };
+    runM[mk] = m1; runQ[qk] = q1; runY[yk] = y1;
+    posts.push({ kind: "log", key: "log-" + r.id, row: r, code: code });
+    if (!slRiseMet(m0) && slRiseMet(m1)) posts.push({ kind: "rise", key: "rise-" + r.id, row: r, code: code, tally: m1 });
+    var t0 = slAdvisorTier(q0), t1 = slAdvisorTier(q1);
+    if (t1 && t1 !== t0) posts.push({ kind: "medal", key: "medal-" + r.id, row: r, code: code, tier: t1 });
+    if (y0.nbac < SL_VALIDATION_NBAC && y1.nbac >= SL_VALIDATION_NBAC) posts.push({ kind: "valid", key: "valid-" + r.id, row: r, code: code });
+  });
+  return posts.reverse();
+}
+
+function ProductionComposer(props) {
+  var roster = props.roster || [];
+  var codeState = useState(""); var code = codeState[0], setCode = codeState[1];
+  var livesState = useState(1); var lives = livesState[0], setLives = livesState[1];
+  var acState = useState(""); var ac = acState[0], setAc = acState[1];
+  var errState = useState(null); var err = errState[0], setErr = errState[1];
+  var busyState = useState(false); var busy = busyState[0], setBusy = busyState[1];
+  var inp = { background: COLORS.line, color: COLORS.ink, border: "none" };
+
+  var post = async function () {
+    var nb = ac === "" ? 0 : Number(ac);
+    if (!code) { setErr("Choose an advisor."); return; }
+    if (!(nb >= 0) || !isFinite(nb)) { setErr("Enter NB AC in pesos."); return; }
+    if (lives === 0 && nb === 0) { setErr("Add at least one life or some NB AC."); return; }
+    setErr(null); setBusy(true);
+    var res = await props.onPost(code, lives, Math.round(nb * 100) / 100);
+    setBusy(false);
+    if (!res || !res.ok) { setErr((res && res.message) || "Couldn't post. Try again."); return; }
+    props.onClose();
+  };
+
+  return h("div", { style: { background: COLORS.card, borderColor: COLORS.line }, className: "rounded-2xl border overflow-hidden" },
+    h("div", { style: { borderColor: COLORS.line }, className: "flex items-center justify-between px-4 py-3 border-b" },
+      h("button", { type: "button", onClick: props.onClose, "aria-label": "Close", style: { color: COLORS.ink }, className: "text-xl leading-none w-8 text-left" }, "\u00d7"),
+      h("div", { style: { color: COLORS.ink }, className: "font-semibold text-[15px]" }, "Log production"),
+      h("button", {
+        type: "button", onClick: post, disabled: busy,
+        style: { background: COLORS.brass, color: "#fff", opacity: busy ? 0.6 : 1 },
+        className: "px-4 py-1.5 rounded-md text-sm font-semibold"
+      }, busy ? "Posting\u2026" : "Post")
+    ),
+    h("div", { className: "p-4 space-y-4" },
+      h("div", { style: { color: COLORS.slate }, className: "text-[12px]" }, "Recorded today \u00b7 " + shortDate(props.today) + ". Copy the figures from the Sun Life portal."),
+      h("div", null,
+        h("div", { style: { color: COLORS.slate }, className: "text-[12px] mb-1.5" }, "Advisor"),
+        h("select", { value: code, onChange: function (ev) { setCode(ev.target.value); setErr(null); }, style: inp, className: "w-full px-3 py-3 rounded-lg text-[15px] outline-none" },
+          h("option", { value: "" }, "Choose advisor\u2026"),
+          roster.map(function (r) { return h("option", { key: r.code, value: r.code }, r.name); })
+        )
+      ),
+      h("div", null,
+        h("div", { style: { color: COLORS.slate }, className: "text-[12px] mb-1.5" }, "Lives settled"),
+        h("div", { className: "flex items-center gap-3" },
+          h("button", { type: "button", "aria-label": "One fewer life", onClick: function () { setLives(Math.max(0, lives - 1)); setErr(null); }, style: { background: COLORS.line, color: COLORS.ink }, className: "w-10 h-10 rounded-full text-xl" }, "\u2212"),
+          h("div", { style: { color: COLORS.ink }, className: "text-2xl font-semibold w-10 text-center font-mono" }, String(lives)),
+          h("button", { type: "button", "aria-label": "One more life", onClick: function () { setLives(Math.min(50, lives + 1)); setErr(null); }, style: { background: COLORS.line, color: COLORS.ink }, className: "w-10 h-10 rounded-full text-xl" }, "+")
+        )
+      ),
+      h("div", null,
+        h("div", { style: { color: COLORS.slate }, className: "text-[12px] mb-1.5" }, "NB AC settled (\u20b1)"),
+        h("input", { type: "number", inputMode: "decimal", min: 0, value: ac, placeholder: "0", onChange: function (ev) { setAc(ev.target.value); setErr(null); }, style: inp, className: "w-full px-3 py-3 rounded-lg text-[16px] outline-none font-mono" })
+      ),
+      err && h("div", { style: { color: COLORS.rust }, className: "text-[13px]" }, err)
+    )
+  );
+}
+
+function TeamFeed(props) {
+  var rows = props.production || [], roster = props.roster || [], today = props.today;
+  var avatars = props.avatarByCode || {}, myCode = props.myCode, isManager = !!props.isManager;
+  var openState = useState(false); var composing = openState[0], setComposing = openState[1];
+  var limitState = useState(15); var limit = limitState[0], setLimit = limitState[1];
+  if (!today) return null;
+  var nameOf = {};
+  roster.forEach(function (r) { nameOf[r.code] = r.name; });
+  var month = slTallyLog(rows, startOfMonth(today), today);
+  var stories = roster.slice().sort(function (a, b) {
+    var pa = slRingPct(month[a.code]), pb = slRingPct(month[b.code]);
+    return (pb - pa) || String(a.name).localeCompare(String(b.name));
+  });
+  var posts = buildFeedPosts(rows);
+  var me = roster.filter(function (r) { return r.code === myCode; })[0];
+  var card = { background: COLORS.card };
+
+  function postHead(code, title, sub) {
+    return h("div", { className: "flex items-center gap-2.5" },
+      h(Avatar, { src: avatars[code], name: nameOf[code] || code, size: 40, background: COLORS.line, color: COLORS.ink }),
+      h("div", { className: "min-w-0" },
+        h("div", { style: { color: COLORS.ink }, className: "font-semibold text-[14px] leading-snug" }, title),
+        h("div", { style: { color: COLORS.slate }, className: "text-[12px]" }, sub)));
+  }
+
+  return h("div", { className: "-mx-5" },
+    // composer
+    isManager && (composing
+      ? h("div", { className: "px-5 pb-2" }, h(ProductionComposer, { roster: roster, today: today, onPost: props.onLog, onClose: function () { setComposing(false); } }))
+      : h("div", { style: card, className: "px-4 py-3 flex items-center gap-2.5" },
+          h(Avatar, { src: avatars[myCode], name: me ? me.name : "Me", size: 40, background: COLORS.line, color: COLORS.ink }),
+          h("button", {
+            type: "button", onClick: function () { setComposing(true); },
+            style: { borderColor: COLORS.line, color: COLORS.slate }, className: "flex-1 text-left px-4 py-2.5 rounded-full border text-[15px]"
+          }, "Log Sun Life production\u2026"))),
+
+    // stories
+    stories.length > 0 && h("div", { style: card, className: "mt-2 py-3" },
+      h("div", { className: "flex gap-3 overflow-x-auto px-4", style: { scrollbarWidth: "none" } },
+        stories.map(function (r) {
+          var t = month[r.code] || { lives: 0, nbac: 0 };
+          var met = slRiseMet(t), pct = slRingPct(t);
+          var ring = met ? COLORS.good : COLORS.brass;
+          return h("div", { key: r.code, className: "shrink-0 text-center", style: { width: "68px" } },
+            h("div", { style: { width: "64px", height: "64px", borderRadius: "50%", margin: "0 auto", padding: "3px",
+              background: "conic-gradient(" + ring + " " + pct + "%, " + COLORS.line + " 0)" } },
+              h("div", { style: { width: "58px", height: "58px", borderRadius: "50%", background: COLORS.card, padding: "2px" } },
+                h(Avatar, { src: avatars[r.code], name: r.name, size: 54, background: COLORS.line, color: COLORS.ink }))),
+            h("div", { style: { color: COLORS.ink }, className: "text-[11px] mt-1 truncate" }, r.code === myCode ? "You" : String(r.name).split(" ")[0]),
+            h("div", { style: { color: met ? COLORS.good : COLORS.slate }, className: "text-[10px] font-mono" },
+              met ? "3-30 \u2713" : (Math.min(t.lives, 99) + "/3 \u00b7 \u20b1" + Math.round(t.nbac / 1000) + "K")));
+        }))),
+
+    // posts
+    posts.length === 0 && h("div", { style: Object.assign({ color: COLORS.slate }, card), className: "mt-2 px-4 py-6 text-sm text-center" },
+      isManager ? "Log the first production from the Sun Life portal and it shows up here." : "Production your manager logs from the Sun Life portal shows up here."),
+    posts.slice(0, limit).map(function (p) {
+      var r = p.row, nm = nameOf[p.code] || p.code, when = feedTimeLabel(r);
+      if (p.kind === "log") {
+        return h("div", { key: p.key, style: card, className: "mt-2 px-4 py-3" },
+          h("div", { className: "flex items-start justify-between gap-2" },
+            postHead(p.code, nm + " \u00b7 production logged", when + " \u00b7 from Sun Life portal"),
+            isManager && h("button", {
+              type: "button", "aria-label": "Delete this entry",
+              onClick: function () { if (window.confirm("Delete this entry? " + nm + ": " + r.lives + " lives, " + fmtPhp(r.nb_ac))) props.onDelete(r.id); },
+              style: { color: COLORS.slate }, className: "text-lg leading-none px-1"
+            }, "\u22ef")),
+          h("div", { style: { color: COLORS.ink }, className: "text-[15px] mt-2.5" },
+            Number(r.lives || 0) + " li" + (Number(r.lives) === 1 ? "fe" : "ves") + " settled \u00b7 " + fmtPhp(r.nb_ac) + " NB AC"));
+      }
+      var label = p.kind === "rise" ? nm + " hit Rise to 3-30"
+        : p.kind === "medal" ? nm + " reached " + p.tier + " Medallion"
+        : nm + " is \u20b1180K validated";
+      var body = p.kind === "rise" ? (p.tally.lives + " lives \u00b7 " + fmtPhp(p.tally.nbac) + " NB AC this " + SL_MONTHS[parseInt(String(r.recorded_date).slice(5, 7), 10) - 1])
+        : p.kind === "medal" ? ("Medallion \u00b7 " + slQuarterLabel(String(r.recorded_date).slice(0, 10)))
+        : ("Calendar year " + String(r.recorded_date).slice(0, 4));
+      return h("div", { key: p.key, style: card, className: "mt-2 px-4 py-3" },
+        postHead(p.code, label, "Milestone \u00b7 " + when),
+        h("div", { style: { background: "rgba(69,189,98,0.12)", color: COLORS.good }, className: "rounded-lg px-3 py-2.5 mt-2.5 text-[14px] font-semibold" }, body));
+    }),
+    posts.length > limit && h("div", { style: card, className: "mt-2" },
+      h("button", { type: "button", onClick: function () { setLimit(limit + 15); }, style: { color: COLORS.brass }, className: "w-full py-3 text-sm font-semibold" }, "See more"))
+  );
+}
+
 function Avatar(props) {
   var size = props.size || 36;
   var base = { width: size + "px", height: size + "px", borderRadius: "50%", flexShrink: 0 };
@@ -8617,7 +8832,7 @@ function MoreRow(props) {
     className: "w-full text-left px-4 py-3.5 rounded-2xl border flex items-center gap-3 active:scale-[0.99] transition-transform"
   },
     h("span", {
-      style: { background: "rgba(242,183,5,0.12)", color: COLORS.brass },
+      style: { background: "rgba(45,136,255,0.12)", color: COLORS.brass },
       className: "w-9 h-9 rounded-full flex items-center justify-center text-base shrink-0",
       "aria-hidden": "true"
     }, props.glyph),
@@ -8844,7 +9059,7 @@ function PaymentCard(props) {
     ),
     isOpen && h("div", { className: "px-4 pb-4" },
       h("div", {
-        style: { whiteSpace: "pre-line", color: COLORS.ink, background: "#202839", borderColor: COLORS.line },
+        style: { whiteSpace: "pre-line", color: COLORS.ink, background: "#3A3B3C", borderColor: COLORS.line },
         className: "text-[13.5px] leading-relaxed mb-3.5 p-3.5 rounded-xl border"
       }, props.filled),
       h("button", {
@@ -9106,7 +9321,7 @@ function UnderwritingRow(props) {
         var meta = uwDecisionMeta(cat);
         return h("div", {
           key: i,
-          style: { background: "#202839", borderColor: COLORS.line },
+          style: { background: "#3A3B3C", borderColor: COLORS.line },
           className: "rounded-xl border p-3"
         },
           h("div", { className: "flex items-center justify-between gap-2 mb-1.5" },
@@ -9296,7 +9511,7 @@ function CloseCelebration(props) {
           }),
           h("div", {
             className: "absolute inset-0 rounded-full flex items-center justify-center",
-            style: { background: "rgba(242,183,5,0.12)" }
+            style: { background: "rgba(45,136,255,0.12)" }
           }, h(BattleRiverMark, { size: 52, uid: "closed" }))
         ),
         h("div", { style: { color: COLORS.brass }, className: "text-[11px] tracking-[0.24em] uppercase font-mono" }, "Client closed"),
@@ -10145,6 +10360,7 @@ function App() {
   // Bumping this is what tells the tree to read it again.
   var scriptTickState = useState(0); var scriptTick = scriptTickState[0], setScriptTick = scriptTickState[1];
   var isManagerState = useState(!!lget("is-manager")); var isManager = isManagerState[0], setIsManager = isManagerState[1];
+  var productionLogState = useState([]); var productionLog = productionLogState[0], setProductionLog = productionLogState[1];
   // The manager's PIN itself, kept ONLY in memory (never localStorage,
   // never persisted) — cleared on every page reload by design. Every
   // manager-only write now re-sends this to a server-side-verifying RPC,
@@ -10290,13 +10506,45 @@ function App() {
     setLastSyncedAt(Date.now());
   };
  
+  // Patch 20: manager-only production log (lives + NB AC from the portal).
+  var logProduction = async function (advisorCode, lives, nbAc) {
+    try {
+      var pin = await requireManagerPin();
+      var res = await sb.rpc("admin_add_production", { p_actor_id: myIdentity.id, p_pin: pin, p_advisor_code: advisorCode, p_lives: lives, p_nb_ac: nbAc });
+      var d = res.data || {};
+      if (res.error || !d.ok) {
+        var err = d.error || (res.error && res.error.message) || "";
+        if (err === "bad_pin" || err === "not_manager" || err === "locked" || err === "no_pin_set" || err === "inactive") return { ok: false, message: managerGateMessage(err, d) };
+        if (err === "unknown_advisor") return { ok: false, message: "That advisor isn't on the roster." };
+        if (err === "invalid_values") return { ok: false, message: "Lives must be 0–50 and NB AC can't be negative." };
+        return { ok: false, message: "Couldn't post. Try again." };
+      }
+      if (d.row) setProductionLog(function (prev) { return [d.row].concat(prev.filter(function (r) { return r.id !== d.row.id; })); });
+      logEvent("production_logged", advisorCode, { lives: lives, nb_ac: nbAc });
+      return { ok: true };
+    } catch (e) { return { ok: false, message: "Cancelled." }; }
+  };
+
+  var deleteProduction = async function (id) {
+    var previous = productionLog;
+    setProductionLog(productionLog.filter(function (r) { return r.id !== id; }));
+    try {
+      var pin = await requireManagerPin();
+      var res = await sb.rpc("admin_delete_production", { p_actor_id: myIdentity.id, p_pin: pin, p_id: id });
+      if (res.error || !(res.data && res.data.ok)) { setProductionLog(previous); window.alert("Couldn't delete that entry \u2014 try again."); }
+    } catch (e) { setProductionLog(previous); }
+  };
+
   var loadTeamData = async function () {
     setTeamLoading(true);
     var results = await Promise.all([
       sb.from("entries").select("*"),
       sb.from("referrals").select("*"),
-      sb.from("submissions").select("*").order("submitted_date", { ascending: false })
+      sb.from("submissions").select("*").order("submitted_date", { ascending: false }),
+      // Patch 20. Fails soft (empty feed) if the migration hasn't run yet.
+      sb.from("production_log").select("*").order("created_at", { ascending: false })
     ]);
+    if (!results[3].error) setProductionLog(results[3].data || []);
     setTeamEntries(results[0].data || []);
     setReferrals(results[1].data || []);
     setSubmissions(results[2].data || []);
@@ -10793,8 +11041,12 @@ function App() {
     setIsManager(true); lset("is-manager", true);
     setAmFlaggedManager(true);
     setManagerPin(pin);
-    setShowManagerGate(false); setView("manager");
+    setShowManagerGate(false);
+    // Patch 20: when the PIN was asked for by a pending write (e.g. Log
+    // production on the Team tab), stay where the manager is — only a
+    // plain "open Manager tools" unlock jumps to the manager view.
     if (pinRequestRef.current) { pinRequestRef.current.resolve(pin); pinRequestRef.current = null; }
+    else setView("manager");
     return { ok: true };
   };
  
@@ -11339,7 +11591,9 @@ function App() {
         hasTeamData: teamEntries.length > 0,
         avatarByCode: avatarByCode,
         myEntriesByDate: myEntries, myRosterRow: myRosterRow, unitMedianPct: unitMedianPct,
-        allSubmissions: submissions, scoreRoster: activeRoster
+        allSubmissions: submissions, scoreRoster: activeRoster,
+        productionLog: productionLog, isManager: isManager,
+        onLogProduction: logProduction, onDeleteProduction: deleteProduction
       }),
       view === "manager" && isManager && h(ManagerView, {
         date: today, roster: roster, activeRoster: activeRoster, teamEntries: teamEntries, loading: teamLoading, onRefresh: loadTeamData,
