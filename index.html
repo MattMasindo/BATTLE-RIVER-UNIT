@@ -861,7 +861,15 @@ function SunLifeScoreboard(props) {
   var avatars = props.avatarByCode || {};
   var nameCell = function (p) {
     return [
-      h(Avatar, { key: "av", src: avatars[p.code], name: p.name, size: 24, background: COLORS.line, color: COLORS.ink }),
+      // Patch 28: same status ring as the Team tab photos —
+      // red no production this month · orange some · green 3-30 or Medallion.
+      (function () {
+        var ringColor = (slRiseMet(p.m) || slAdvisorTier(p.q)) ? COLORS.good
+          : (p.m.lives > 0 || p.m.nbac > 0) ? SL_RING_ORANGE : COLORS.rust;
+        return h("span", { key: "av", style: { display: "inline-block", flexShrink: 0, borderRadius: "50%", padding: "2px", background: ringColor } },
+          h("span", { style: { display: "block", borderRadius: "50%", padding: "1.5px", background: COLORS.card } },
+            h(Avatar, { src: avatars[p.code], name: p.name, size: 24, background: COLORS.line, color: COLORS.ink })));
+      })(),
       h("span", { key: "nm", style: { color: p.isMe ? COLORS.brass : COLORS.ink }, className: "truncate" }, p.name + (p.isMe ? " (you)" : ""))
     ];
   };
@@ -5928,7 +5936,7 @@ function isOneSignalConfigured() {
 }
  
 var APP_NAME = "Unit App";
-var APP_VERSION = "5.13.0-patch26";
+var APP_VERSION = "5.13.0-patch28";
  
 function isSupabaseConfigured() {
   return SUPABASE_URL.indexOf("YOUR-PROJECT") === -1 && SUPABASE_ANON_KEY.indexOf("YOUR-ANON") === -1;
@@ -7548,8 +7556,10 @@ function CloseBtn(props) {
 //           (1+ new prospect, 1+ chat script use, posted on social)
 //   dimmed  not done (yet)
 // =====================================================================
+// Patch 27: "done" = used the chat script at least once today (the
+// auto-logged Chat Script Usage metric). Prospects and social no longer count.
 function activityDone(e) {
-  return !!e && (e.prospecting || 0) >= 1 && (e.approaching || 0) >= 1 && !!e.social;
+  return !!e && (e.approaching || 0) >= 1;
 }
 
 function ActivityRings(props) {
@@ -7561,26 +7571,25 @@ function ActivityRings(props) {
   var avatars = data.avatarByCode || {};
   var people = data.roster.map(function (r) {
     var e = byCode[r.code];
-    var steps = e ? [(e.prospecting || 0) >= 1, (e.approaching || 0) >= 1, !!e.social].filter(Boolean).length : 0;
-    return { r: r, done: activityDone(e), steps: steps };
+    var uses = e ? (e.approaching || 0) : 0;
+    return { r: r, done: activityDone(e), steps: uses };
   }).sort(function (a, b) { return (b.done - a.done) || (b.steps - a.steps) || String(a.r.name).localeCompare(String(b.r.name)); });
   var doneCount = people.filter(function (p) { return p.done; }).length;
 
   return h("div", { style: { background: COLORS.card }, className: "-mx-5 mb-5 py-3" },
     h("div", { className: "flex items-baseline justify-between px-4 mb-2" },
-      h("div", { style: { color: COLORS.slate }, className: "text-[11px]" }, "Today's activity \u00b7 prospect + script + social"),
+      h("div", { style: { color: COLORS.slate }, className: "text-[11px]" }, "Today's chat script use"),
       h("div", { style: { color: doneCount ? COLORS.good : COLORS.slate }, className: "text-[11px] font-mono" }, doneCount + "/" + people.length + " done")),
     h("div", { className: "flex gap-3 overflow-x-auto px-4", style: { scrollbarWidth: "none" } },
       people.map(function (p) {
         var r = p.r;
-        return h("div", { key: r.code, className: "shrink-0 text-center", style: { width: "68px", opacity: p.done ? 1 : 0.45 } },
+        return h("div", { key: r.code, className: "shrink-0 text-center", style: { width: "68px" } },
           h("div", { style: { width: "64px", height: "64px", borderRadius: "50%", margin: "0 auto", padding: "3px",
             background: p.done ? COLORS.good : COLORS.line } },
-            h("div", { style: { width: "58px", height: "58px", borderRadius: "50%", background: COLORS.card, padding: "2px",
-              filter: p.done ? "none" : "grayscale(1)" } },
+            h("div", { style: { width: "58px", height: "58px", borderRadius: "50%", background: COLORS.card, padding: "2px" } },
               h(Avatar, { src: avatars[r.code], name: r.name, size: 54, background: COLORS.line, color: COLORS.ink }))),
           h("div", { style: { color: COLORS.ink }, className: "text-[11px] mt-1 truncate" }, r.code === data.myCode ? "You" : String(r.name).split(" ")[0]),
-          h("div", { style: { color: p.done ? COLORS.good : COLORS.slate }, className: "text-[10px] font-mono" }, p.done ? "Done \u2713" : p.steps + "/3"));
+          h("div", { style: { color: p.done ? COLORS.good : COLORS.slate }, className: "text-[10px] font-mono" }, p.done ? ("\u2713 " + p.steps + " use" + (p.steps === 1 ? "" : "s")) : "Not yet"));
       })));
 }
 
