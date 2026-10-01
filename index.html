@@ -785,23 +785,51 @@ var SL_MDRT = [
 // (this year only) + production-log entries recorded AFTER that date.
 // Entries on or before the as-of date are assumed to be inside the
 // portal total already, so nothing is counted twice.
+// Patch 30: two windows from the same inputs.
+//   nbac  = Jan 1 – today   (saved NB AC total + NB AC logged after its as-of)
+//   lives = Jul 1 – today   (saved lives total + lives logged after its as-of)
+// A saved total only counts inside the window its as-of date falls in, so
+// in July the old lives total drops away and in January the old NB AC does.
 function slYearTally(prod, baselines, today) {
-  var yr = today.slice(0, 4), out = {}, asOf = {};
+  var yFrom = today.slice(0, 4) + "-01-01", lFrom = slMacaulayYearStart(today);
+  var out = {}, acAsOf = {}, lvAsOf = {};
+  function row(code) { return out[code] || (out[code] = { lives: 0, nbac: 0 }); }
   (baselines || []).forEach(function (b) {
     var d = String(b.as_of || "").slice(0, 10);
-    if (d.slice(0, 4) !== yr || d > today) return;
-    out[b.advisor_code] = { lives: Number(b.lives || 0), nbac: Number(b.nb_ac || 0) };
-    asOf[b.advisor_code] = d;
+    if (!d || d > today) return;
+    if (d >= yFrom) { row(b.advisor_code).nbac = Number(b.nb_ac || 0); acAsOf[b.advisor_code] = d; }
+    if (d >= lFrom) { row(b.advisor_code).lives = Number(b.lives || 0); lvAsOf[b.advisor_code] = d; }
   });
   (prod || []).forEach(function (r) {
     var d = r && r.recorded_date ? String(r.recorded_date).slice(0, 10) : null;
-    if (!d || d.slice(0, 4) !== yr || d > today) return;
-    if (asOf[r.advisor_code] && d <= asOf[r.advisor_code]) return;
-    var t = out[r.advisor_code] || (out[r.advisor_code] = { lives: 0, nbac: 0 });
-    t.lives += Number(r.lives || 0);
-    t.nbac += Number(r.nb_ac || 0);
+    if (!d || d > today) return;
+    var code = r.advisor_code;
+    if (d >= yFrom && !(acAsOf[code] && d <= acAsOf[code])) row(code).nbac += Number(r.nb_ac || 0);
+    if (d >= lFrom && !(lvAsOf[code] && d <= lvAsOf[code])) row(code).lives += Number(r.lives || 0);
   });
   return out;
+}
+
+// Patch 30: comma-formatted number inputs (e.g. 1,759,200). Inputs are
+// text fields with a numeric keypad; values are parsed by stripping commas.
+function fmtNumInput(raw, allowDecimal) {
+  var str = String(raw == null ? "" : raw).replace(/[^0-9.]/g, "");
+  if (!allowDecimal) str = str.replace(/\./g, "");
+  var parts = str.split(".");
+  var whole = parts[0].replace(/^0+(?=\d)/, "").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return parts.length > 1 ? whole + "." + parts.slice(1).join("").slice(0, 2) : whole;
+}
+function parseNumInput(v) { return Number(String(v == null ? "" : v).replace(/,/g, "")); }
+
+// Patch 30: Macaulay lives run July 1 – June 30 (Macaulay year);
+// NB AC for validation, Macaulay and MDRT stays January – December.
+function slMacaulayYearStart(today) {
+  var y = parseInt(today.slice(0, 4), 10), m = parseInt(today.slice(5, 7), 10);
+  return (m >= 7 ? y : y - 1) + "-07-01";
+}
+function slMacaulayYearLabel(today) {
+  var st = parseInt(slMacaulayYearStart(today).slice(0, 4), 10);
+  return "Jul " + st + "\u2013Jun " + (st + 1);
 }
 
 function slMacaulayTier(t) {
@@ -1011,7 +1039,7 @@ function SunLifeScoreboard(props) {
 
       // Patch 29: Macaulay standing — calendar year, 36 lives + NB AC
       h("div", { style: card, className: "rounded-2xl border p-4" },
-        head("Macaulay standing", "Jan\u2013Dec " + today.slice(0, 4) + " \u00b7 36 lives + NB AC"),
+        head("Macaulay standing", "Lives " + slMacaulayYearLabel(today) + " \u00b7 NB AC Jan\u2013Dec"),
         h("div", { style: { display: "grid", gridTemplateColumns: "minmax(0,1fr) 46px 66px 76px", gap: "6px 8px", alignItems: "center" }, className: "text-[12px]" },
           colHead(["Advisor", "Lives", "NB AC", "Tier"]),
           byYear.map(function (p) {
@@ -4353,10 +4381,10 @@ function YtdBaselineSection(props) {
   var pick = function (c) {
     setCode(c); setErr(null); setOk(null);
     var b = byCode[c];
-    setLives(b ? String(b.lives) : ""); setAc(b ? String(Number(b.nb_ac)) : ""); setAsOf(today);
+    setLives(b ? fmtNumInput(b.lives, false) : ""); setAc(b ? fmtNumInput(Number(b.nb_ac), true) : ""); setAsOf(today);
   };
   var save = async function () {
-    var lv = Number(lives), nb = Number(ac);
+    var lv = parseNumInput(lives), nb = parseNumInput(ac);
     if (!code) { setErr("Choose an advisor."); return; }
     if (lives === "" || !(lv >= 0) || Math.floor(lv) !== lv) { setErr("Enter settled lives as a whole number."); return; }
     if (ac === "" || !(nb >= 0) || !isFinite(nb)) { setErr("Enter NB AC in pesos."); return; }
@@ -4372,18 +4400,18 @@ function YtdBaselineSection(props) {
   return h("div", null,
     h(SectionTitle, { label: "Year-to-date totals (Sun Life portal)" }),
     h("div", { style: { color: COLORS.slate }, className: "text-[11px] leading-relaxed mb-2.5" },
-      "Enter each advisor's settled lives and NB AC from January to the as-of date. Validation, Macaulay and MDRT use this, plus any production you log after that date."),
+      "From the Sun Life portal: settled lives from July 1 (Macaulay year) and NB AC from January 1, both up to the as-of date. Validation, Macaulay and MDRT use these, plus any production you log after that date."),
     h("div", { style: { background: COLORS.card, borderColor: COLORS.line }, className: "rounded-2xl border p-4 space-y-3" },
       h("select", { value: code, onChange: function (ev) { pick(ev.target.value); }, style: inp, className: "w-full px-3 py-3 rounded-lg text-[15px] outline-none" },
         h("option", { value: "" }, "Choose advisor\u2026"),
         roster.map(function (r) { return h("option", { key: r.code, value: r.code }, r.name); })),
       h("div", { className: "flex gap-2" },
         h("div", { className: "flex-1" },
-          h("div", { style: { color: COLORS.slate }, className: "text-[11px] mb-1" }, "Settled lives (Jan to date)"),
-          h("input", { type: "number", inputMode: "numeric", min: 0, value: lives, placeholder: "0", onChange: function (ev) { setLives(ev.target.value); setErr(null); setOk(null); }, style: inp, className: "w-full px-3 py-3 rounded-lg text-[15px] outline-none font-mono" })),
+          h("div", { style: { color: COLORS.slate }, className: "text-[11px] mb-1" }, "Settled lives (Jul 1 to date)"),
+          h("input", { type: "text", inputMode: "numeric", value: lives, placeholder: "0", onChange: function (ev) { setLives(fmtNumInput(ev.target.value, false)); setErr(null); setOk(null); }, style: inp, className: "w-full px-3 py-3 rounded-lg text-[15px] outline-none font-mono" })),
         h("div", { className: "flex-1" },
           h("div", { style: { color: COLORS.slate }, className: "text-[11px] mb-1" }, "NB AC (Jan to date, \u20b1)"),
-          h("input", { type: "number", inputMode: "decimal", min: 0, value: ac, placeholder: "0", onChange: function (ev) { setAc(ev.target.value); setErr(null); setOk(null); }, style: inp, className: "w-full px-3 py-3 rounded-lg text-[15px] outline-none font-mono" }))),
+          h("input", { type: "text", inputMode: "decimal", value: ac, placeholder: "0", onChange: function (ev) { setAc(fmtNumInput(ev.target.value, true)); setErr(null); setOk(null); }, style: inp, className: "w-full px-3 py-3 rounded-lg text-[15px] outline-none font-mono" }))),
       h("div", null,
         h("div", { style: { color: COLORS.slate }, className: "text-[11px] mb-1" }, "As of"),
         h("input", { type: "date", value: asOf, max: today, onChange: function (ev) { setAsOf(ev.target.value); setErr(null); setOk(null); }, style: inp, className: "w-full px-3 py-3 rounded-lg text-[15px] outline-none font-mono" })),
@@ -4398,7 +4426,7 @@ function YtdBaselineSection(props) {
           h("span", { style: { color: COLORS.ink }, className: "text-[13px] truncate" }, x.r.name),
           x.b
             ? h("span", { style: { color: COLORS.slate }, className: "text-[11px] font-mono shrink-0" },
-                x.b.lives + " lives \u00b7 " + fmtPhp(x.b.nb_ac) + " \u00b7 " + shortDate(String(x.b.as_of).slice(0, 10)))
+                fmtNumInput(x.b.lives, false) + " lives \u00b7 " + fmtPhp(x.b.nb_ac) + " \u00b7 " + shortDate(String(x.b.as_of).slice(0, 10)))
             : h("span", { style: { color: COLORS.rust }, className: "text-[11px] shrink-0" }, "Not entered"));
       })));
 }
@@ -6115,7 +6143,7 @@ function isOneSignalConfigured() {
 }
  
 var APP_NAME = "Unit App";
-var APP_VERSION = "5.13.0-patch29";
+var APP_VERSION = "5.13.0-patch30";
  
 function isSupabaseConfigured() {
   return SUPABASE_URL.indexOf("YOUR-PROJECT") === -1 && SUPABASE_ANON_KEY.indexOf("YOUR-ANON") === -1;
@@ -8848,7 +8876,7 @@ function ProductionComposer(props) {
   var inp = { background: COLORS.line, color: COLORS.ink, border: "none" };
 
   var post = async function () {
-    var nb = ac === "" ? 0 : Number(ac);
+    var nb = ac === "" ? 0 : parseNumInput(ac);
     if (!code) { setErr("Choose an advisor."); return; }
     if (!(nb >= 0) || !isFinite(nb)) { setErr("Enter NB AC in pesos."); return; }
     if (lives === 0 && nb === 0) { setErr("Add at least one life or some NB AC."); return; }
@@ -8901,7 +8929,7 @@ function ProductionComposer(props) {
       ),
       h("div", null,
         h("div", { style: { color: COLORS.slate }, className: "text-[12px] mb-1.5" }, "NB AC settled (\u20b1)"),
-        h("input", { type: "number", inputMode: "decimal", min: 0, value: ac, placeholder: "0", onChange: function (ev) { setAc(ev.target.value); setErr(null); }, style: inp, className: "w-full px-3 py-3 rounded-lg text-[16px] outline-none font-mono" })
+        h("input", { type: "text", inputMode: "decimal", value: ac, placeholder: "0", onChange: function (ev) { setAc(fmtNumInput(ev.target.value, true)); setErr(null); }, style: inp, className: "w-full px-3 py-3 rounded-lg text-[16px] outline-none font-mono" })
       ),
       err && h("div", { style: { color: COLORS.rust }, className: "text-[13px]" }, err),
       // Patch 21: with the post feed gone, this is where a mistaken entry
