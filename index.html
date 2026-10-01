@@ -765,6 +765,69 @@ var SL_UNIT_MEDALLION = [
   { tier: "Gold", nbac: 800000 }, { tier: "Platinum", nbac: 1500000 }
 ];
 var SL_RING_ORANGE = "#F5A623";
+// Patch 29: year-based standings. Both measured Jan–Dec on settled lives
+// and NB AC (year-to-date total from the Sun Life portal + production
+// logged after that total's "as of" date).
+var SL_MACAULAY = [
+  { tier: "Bronze", lives: 36, nbac: 650000 },
+  { tier: "Silver", lives: 36, nbac: 800000 },
+  { tier: "Gold", lives: 36, nbac: 1000000 },
+  { tier: "Vice President", lives: 36, nbac: 1550000 },
+  { tier: "Senior Vice President", lives: 36, nbac: 2300000 }
+];
+var SL_MDRT = [
+  { tier: "MDRT Member", nbac: 1759200 },
+  { tier: "Court of the Table", nbac: 5277600 },
+  { tier: "Top of the Table", nbac: 10555200 }
+];
+
+// Year-to-date per advisor = the manager's portal total "as of" a date
+// (this year only) + production-log entries recorded AFTER that date.
+// Entries on or before the as-of date are assumed to be inside the
+// portal total already, so nothing is counted twice.
+function slYearTally(prod, baselines, today) {
+  var yr = today.slice(0, 4), out = {}, asOf = {};
+  (baselines || []).forEach(function (b) {
+    var d = String(b.as_of || "").slice(0, 10);
+    if (d.slice(0, 4) !== yr || d > today) return;
+    out[b.advisor_code] = { lives: Number(b.lives || 0), nbac: Number(b.nb_ac || 0) };
+    asOf[b.advisor_code] = d;
+  });
+  (prod || []).forEach(function (r) {
+    var d = r && r.recorded_date ? String(r.recorded_date).slice(0, 10) : null;
+    if (!d || d.slice(0, 4) !== yr || d > today) return;
+    if (asOf[r.advisor_code] && d <= asOf[r.advisor_code]) return;
+    var t = out[r.advisor_code] || (out[r.advisor_code] = { lives: 0, nbac: 0 });
+    t.lives += Number(r.lives || 0);
+    t.nbac += Number(r.nb_ac || 0);
+  });
+  return out;
+}
+
+function slMacaulayTier(t) {
+  var tier = null;
+  SL_MACAULAY.forEach(function (x) { if (t.lives >= x.lives && t.nbac >= x.nbac) tier = x.tier; });
+  return tier;
+}
+function slMacaulayNext(t) {
+  for (var i = 0; i < SL_MACAULAY.length; i++) { var x = SL_MACAULAY[i]; if (!(t.lives >= x.lives && t.nbac >= x.nbac)) return x; }
+  return null;
+}
+function slMdrtTier(nbac) {
+  var tier = null;
+  SL_MDRT.forEach(function (x) { if (nbac >= x.nbac) tier = x.tier; });
+  return tier;
+}
+function slMdrtNext(nbac) {
+  for (var i = 0; i < SL_MDRT.length; i++) if (nbac < SL_MDRT[i].nbac) return SL_MDRT[i];
+  return null;
+}
+function slShortPhp(n) {
+  n = Math.round(n || 0);
+  if (n >= 1000000) return "\u20b1" + (Math.round(n / 10000) / 100) + "M";
+  if (n >= 1000) return "\u20b1" + Math.round(n / 1000) + "K";
+  return "\u20b1" + n;
+}
 var SL_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 // Settled date, falling back to submitted date only for older rows that
@@ -832,7 +895,7 @@ function SunLifeScoreboard(props) {
   var prod = props.production || [];
   var month = slTallyLog(prod, monthFrom, today);
   var quarter = slTallyLog(prod, qFrom, today);
-  var year = slTallyLog(prod, yFrom, today);
+  var year = slYearTally(prod, props.baselines || [], today);
   var zero = { lives: 0, nbac: 0 };
   var monthLabel = SL_MONTHS[parseInt(today.slice(5, 7), 10) - 1];
 
@@ -944,6 +1007,49 @@ function SunLifeScoreboard(props) {
               h("span", { style: { color: done ? COLORS.good : COLORS.ink }, className: "font-mono text-right" }, done ? "Validated" : fmtPhp(p.y.nbac)));
           })
         )
+      ),
+
+      // Patch 29: Macaulay standing — calendar year, 36 lives + NB AC
+      h("div", { style: card, className: "rounded-2xl border p-4" },
+        head("Macaulay standing", "Jan\u2013Dec " + today.slice(0, 4) + " \u00b7 36 lives + NB AC"),
+        h("div", { style: { display: "grid", gridTemplateColumns: "minmax(0,1fr) 46px 66px 76px", gap: "6px 8px", alignItems: "center" }, className: "text-[12px]" },
+          colHead(["Advisor", "Lives", "NB AC", "Tier"]),
+          byYear.map(function (p) {
+            var tier = slMacaulayTier(p.y), next = slMacaulayNext(p.y);
+            return [
+              h("span", { key: p.code + "n", className: "min-w-0 flex items-center gap-2" }, nameCell(p)),
+              h("span", { key: p.code + "l", style: { color: p.y.lives >= 36 ? COLORS.good : COLORS.ink }, className: "font-mono" }, p.y.lives + "/36"),
+              h("span", { key: p.code + "a", style: { color: COLORS.ink }, className: "font-mono" }, slShortPhp(p.y.nbac)),
+              h("span", { key: p.code + "t", style: { color: tier ? COLORS.brass : COLORS.slate }, className: "text-[11px] leading-tight" },
+                tier ? (tier === "Senior Vice President" ? "SVP" : tier === "Vice President" ? "VP" : tier)
+                  : (next ? [next.nbac > p.y.nbac ? slShortPhp(next.nbac - p.y.nbac) : null,
+                             next.lives > p.y.lives ? (next.lives - p.y.lives) + " li" + (next.lives - p.y.lives === 1 ? "fe" : "ves") : null]
+                            .filter(Boolean).join(" + ") + " to go" : "\u2014"))
+            ];
+          })
+        ),
+        h("div", { style: { color: COLORS.slate }, className: "text-[10px] mt-2 leading-relaxed" },
+          "All tiers need 36 settled lives \u00b7 Bronze \u20b1650K \u00b7 Silver \u20b1800K \u00b7 Gold \u20b11M \u00b7 VP \u20b11.55M \u00b7 SVP \u20b12.3M")
+      ),
+
+      // Patch 29: MDRT standing — calendar year, NB AC
+      h("div", { style: card, className: "rounded-2xl border p-4" },
+        head("MDRT standing", "Jan\u2013Dec " + today.slice(0, 4) + " \u00b7 NB AC"),
+        h("div", { className: "space-y-2.5" },
+          byYear.map(function (p) {
+            var tier = slMdrtTier(p.y.nbac), next = slMdrtNext(p.y.nbac);
+            var pct = next ? (p.y.nbac / next.nbac) * 100 : 100;
+            return h("div", { key: p.code },
+              h("div", { style: { display: "grid", gridTemplateColumns: "minmax(0,1fr) 1fr 70px", gap: "8px", alignItems: "center" }, className: "text-[12px]" },
+                h("span", { className: "min-w-0 flex items-center gap-2" }, nameCell(p)),
+                slBar(pct, tier ? COLORS.good : COLORS.brass),
+                h("span", { style: { color: tier ? COLORS.good : COLORS.ink }, className: "font-mono text-right" }, slShortPhp(p.y.nbac))),
+              h("div", { style: { color: tier ? COLORS.good : COLORS.slate }, className: "text-[10px] mt-0.5 text-right" },
+                (tier ? tier + (next ? " \u00b7 " : "") : "") + (next ? slShortPhp(next.nbac - p.y.nbac) + " to " + next.tier : "")));
+          })
+        ),
+        h("div", { style: { color: COLORS.slate }, className: "text-[10px] mt-2 leading-relaxed" },
+          "Member \u20b11,759,200 \u00b7 Court of the Table \u20b15,277,600 \u00b7 Top of the Table \u20b110,555,200")
       )
     )
   );
@@ -2979,7 +3085,7 @@ function AdvisorView(props) {
       h(TeamFeed, { production: productionLog, roster: scoreRoster, today: date, myCode: myCode, isManager: viewerIsManager,
         avatarByCode: props.avatarByCode, onLog: props.onLogProduction, onDelete: props.onDeleteProduction,
         onSaveAvatar: props.onSaveAvatar }),
-      h(SunLifeScoreboard, { production: productionLog, roster: scoreRoster, today: date, myCode: myCode, avatarByCode: props.avatarByCode }),
+      h(SunLifeScoreboard, { production: productionLog, baselines: props.ytdBaselines, roster: scoreRoster, today: date, myCode: myCode, avatarByCode: props.avatarByCode }),
       SHOW_TEAM_ACTIVITY && h("div", null,
       h(SectionTitle, { label: "Team today" }),
       h("div", { className: "grid grid-cols-2 gap-3" },
@@ -4225,6 +4331,78 @@ function topTier(awardProgress, advisorCode, awardType) {
   return best.current_tier || null;
 }
  
+// =====================================================================
+// Patch 29 — YtdBaselineSection (Manager tools): the manager types each
+// advisor's Jan-to-date settled lives + NB AC from the Sun Life portal.
+// Validation, Macaulay and MDRT use it, plus production logged after its
+// "as of" date. Saving again replaces the previous figure for that advisor.
+// =====================================================================
+function YtdBaselineSection(props) {
+  var roster = props.roster || [], baselines = props.baselines || [], today = props.today;
+  var byCode = {};
+  baselines.forEach(function (b) { byCode[b.advisor_code] = b; });
+  var codeState = useState(""); var code = codeState[0], setCode = codeState[1];
+  var livesState = useState(""); var lives = livesState[0], setLives = livesState[1];
+  var acState = useState(""); var ac = acState[0], setAc = acState[1];
+  var asOfState = useState(today); var asOf = asOfState[0], setAsOf = asOfState[1];
+  var errState = useState(null); var err = errState[0], setErr = errState[1];
+  var okState = useState(null); var ok = okState[0], setOk = okState[1];
+  var busyState = useState(false); var busy = busyState[0], setBusy = busyState[1];
+  var inp = { background: COLORS.line, color: COLORS.ink, border: "none" };
+
+  var pick = function (c) {
+    setCode(c); setErr(null); setOk(null);
+    var b = byCode[c];
+    setLives(b ? String(b.lives) : ""); setAc(b ? String(Number(b.nb_ac)) : ""); setAsOf(today);
+  };
+  var save = async function () {
+    var lv = Number(lives), nb = Number(ac);
+    if (!code) { setErr("Choose an advisor."); return; }
+    if (lives === "" || !(lv >= 0) || Math.floor(lv) !== lv) { setErr("Enter settled lives as a whole number."); return; }
+    if (ac === "" || !(nb >= 0) || !isFinite(nb)) { setErr("Enter NB AC in pesos."); return; }
+    if (!asOf || asOf > today || asOf.slice(0, 4) !== today.slice(0, 4)) { setErr("As-of date must be this year and not in the future."); return; }
+    setErr(null); setBusy(true);
+    var res = await props.onSave(code, lv, Math.round(nb * 100) / 100, asOf);
+    setBusy(false);
+    if (!res || !res.ok) { setErr((res && res.message) || "Couldn't save. Try again."); return; }
+    setOk("Saved."); 
+  };
+
+  var list = roster.map(function (r) { return { r: r, b: byCode[r.code] }; });
+  return h("div", null,
+    h(SectionTitle, { label: "Year-to-date totals (Sun Life portal)" }),
+    h("div", { style: { color: COLORS.slate }, className: "text-[11px] leading-relaxed mb-2.5" },
+      "Enter each advisor's settled lives and NB AC from January to the as-of date. Validation, Macaulay and MDRT use this, plus any production you log after that date."),
+    h("div", { style: { background: COLORS.card, borderColor: COLORS.line }, className: "rounded-2xl border p-4 space-y-3" },
+      h("select", { value: code, onChange: function (ev) { pick(ev.target.value); }, style: inp, className: "w-full px-3 py-3 rounded-lg text-[15px] outline-none" },
+        h("option", { value: "" }, "Choose advisor\u2026"),
+        roster.map(function (r) { return h("option", { key: r.code, value: r.code }, r.name); })),
+      h("div", { className: "flex gap-2" },
+        h("div", { className: "flex-1" },
+          h("div", { style: { color: COLORS.slate }, className: "text-[11px] mb-1" }, "Settled lives (Jan to date)"),
+          h("input", { type: "number", inputMode: "numeric", min: 0, value: lives, placeholder: "0", onChange: function (ev) { setLives(ev.target.value); setErr(null); setOk(null); }, style: inp, className: "w-full px-3 py-3 rounded-lg text-[15px] outline-none font-mono" })),
+        h("div", { className: "flex-1" },
+          h("div", { style: { color: COLORS.slate }, className: "text-[11px] mb-1" }, "NB AC (Jan to date, \u20b1)"),
+          h("input", { type: "number", inputMode: "decimal", min: 0, value: ac, placeholder: "0", onChange: function (ev) { setAc(ev.target.value); setErr(null); setOk(null); }, style: inp, className: "w-full px-3 py-3 rounded-lg text-[15px] outline-none font-mono" }))),
+      h("div", null,
+        h("div", { style: { color: COLORS.slate }, className: "text-[11px] mb-1" }, "As of"),
+        h("input", { type: "date", value: asOf, max: today, onChange: function (ev) { setAsOf(ev.target.value); setErr(null); setOk(null); }, style: inp, className: "w-full px-3 py-3 rounded-lg text-[15px] outline-none font-mono" })),
+      err && h("div", { style: { color: COLORS.rust }, className: "text-[13px]" }, err),
+      ok && h("div", { style: { color: COLORS.good }, className: "text-[13px]" }, ok),
+      h("button", { type: "button", onClick: save, disabled: busy, style: { background: COLORS.brass, color: "#fff", opacity: busy ? 0.6 : 1 },
+        className: "w-full py-3 rounded-lg font-semibold text-[15px]" }, busy ? "Saving\u2026" : "Save totals")),
+    h("div", { style: { background: COLORS.card, borderColor: COLORS.line }, className: "rounded-2xl border divide-y mt-2" },
+      list.map(function (x) {
+        return h("button", { key: x.r.code, type: "button", onClick: function () { pick(x.r.code); try { window.scrollBy({ top: -240, behavior: "smooth" }); } catch (e) {} },
+          style: { borderColor: COLORS.line }, className: "w-full px-4 py-2.5 flex items-center justify-between gap-2 text-left" },
+          h("span", { style: { color: COLORS.ink }, className: "text-[13px] truncate" }, x.r.name),
+          x.b
+            ? h("span", { style: { color: COLORS.slate }, className: "text-[11px] font-mono shrink-0" },
+                x.b.lives + " lives \u00b7 " + fmtPhp(x.b.nb_ac) + " \u00b7 " + shortDate(String(x.b.as_of).slice(0, 10)))
+            : h("span", { style: { color: COLORS.rust }, className: "text-[11px] shrink-0" }, "Not entered"));
+      })));
+}
+
 function ManagerView(props) {
   var date = props.date, roster = props.roster, activeRoster = props.activeRoster || props.roster, teamEntries = props.teamEntries, loading = props.loading, onRefresh = props.onRefresh,
     missingToday = props.missingToday, loggedTodayCount = props.loggedTodayCount, targets = props.targets, onSaveTargets = props.onSaveTargets,
@@ -4606,7 +4784,7 @@ function ManagerView(props) {
     h("div", null,
       h(SectionTitle, { label: "FYP Verification" }),
       h("div", { style: { color: COLORS.slate }, className: "text-[11px] leading-relaxed mb-2.5" },
-        "Advisors log submitted applications. Mark one settled only once Sun Life has approved it \u2014 settled NB AC feeds the Sun Life scoreboard on the Team tab."),
+        "Advisors log submitted applications. Older records kept for reference. The Sun Life scoreboard now counts Log production (Team tab) and Year-to-date totals below."),
       (function () {
         var pending = submissions.filter(function (s) { return !s.settled; });
         var settled = submissions.filter(function (s) { return s.settled; });
@@ -4672,6 +4850,7 @@ function ManagerView(props) {
         );
       })()
     ),
+    props.onSaveBaseline && h(YtdBaselineSection, { roster: activeRoster, baselines: props.ytdBaselines, today: date, onSave: props.onSaveBaseline }),
     SHOW_LEGACY_SUBMISSION_FORM && h("div", null,
       h(SectionTitle, { label: "Add Submission (Manager)" }),
       h("div", { className: "flex items-center justify-between mb-2" },
@@ -5936,7 +6115,7 @@ function isOneSignalConfigured() {
 }
  
 var APP_NAME = "Unit App";
-var APP_VERSION = "5.13.0-patch28";
+var APP_VERSION = "5.13.0-patch29";
  
 function isSupabaseConfigured() {
   return SUPABASE_URL.indexOf("YOUR-PROJECT") === -1 && SUPABASE_ANON_KEY.indexOf("YOUR-ANON") === -1;
@@ -10446,6 +10625,7 @@ function App() {
   var scriptTickState = useState(0); var scriptTick = scriptTickState[0], setScriptTick = scriptTickState[1];
   var isManagerState = useState(!!lget("is-manager")); var isManager = isManagerState[0], setIsManager = isManagerState[1];
   var chatsEntriesState = useState([]); var chatsEntries = chatsEntriesState[0], setChatsEntries = chatsEntriesState[1];
+  var ytdBaselinesState = useState([]); var ytdBaselines = ytdBaselinesState[0], setYtdBaselines = ytdBaselinesState[1];
   var productionLogState = useState([]); var productionLog = productionLogState[0], setProductionLog = productionLogState[1];
   // The manager's PIN itself, kept ONLY in memory (never localStorage,
   // never persisted) — cleared on every page reload by design. Every
@@ -10611,6 +10791,25 @@ function App() {
     } catch (e) { return { ok: false, message: "Cancelled." }; }
   };
 
+  // Patch 29: manager sets an advisor's Jan-to-date portal totals.
+  var saveBaseline = async function (advisorCode, lives, nbAc, asOf) {
+    try {
+      var pin = await requireManagerPin();
+      var res = await sb.rpc("admin_set_ytd_baseline", { p_actor_id: myIdentity.id, p_pin: pin, p_advisor_code: advisorCode, p_lives: lives, p_nb_ac: nbAc, p_as_of: asOf });
+      var d = res.data || {};
+      if (res.error || !d.ok) {
+        var err = d.error || (res.error && res.error.message) || "";
+        if (err === "bad_pin" || err === "not_manager" || err === "locked" || err === "no_pin_set" || err === "inactive") return { ok: false, message: managerGateMessage(err, d) };
+        if (err === "unknown_advisor") return { ok: false, message: "That advisor isn't on the roster." };
+        if (err === "invalid_values") return { ok: false, message: "Check the numbers and the as-of date." };
+        return { ok: false, message: "Couldn't save. Try again." };
+      }
+      if (d.row) setYtdBaselines(function (prev) { return prev.filter(function (b) { return b.advisor_code !== d.row.advisor_code; }).concat([d.row]); });
+      logEvent("ytd_baseline_saved", advisorCode, { lives: lives, nb_ac: nbAc, as_of: asOf });
+      return { ok: true };
+    } catch (e) { return { ok: false, message: "Cancelled." }; }
+  };
+
   var deleteProduction = async function (id) {
     var previous = productionLog;
     setProductionLog(productionLog.filter(function (r) { return r.id !== id; }));
@@ -10628,9 +10827,12 @@ function App() {
       sb.from("referrals").select("*"),
       sb.from("submissions").select("*").order("submitted_date", { ascending: false }),
       // Patch 20. Fails soft (empty feed) if the migration hasn't run yet.
-      sb.from("production_log").select("*").order("created_at", { ascending: false })
+      sb.from("production_log").select("*").order("created_at", { ascending: false }),
+      // Patch 29. Fails soft (no baselines) if the migration hasn't run yet.
+      sb.from("ytd_baseline").select("*")
     ]);
     if (!results[3].error) setProductionLog(results[3].data || []);
+    if (!results[4].error) setYtdBaselines(results[4].data || []);
     setTeamEntries(results[0].data || []);
     setReferrals(results[1].data || []);
     setSubmissions(results[2].data || []);
@@ -11695,7 +11897,8 @@ function App() {
         allSubmissions: submissions, scoreRoster: activeRoster,
         productionLog: productionLog, isManager: isManager,
         onLogProduction: logProduction, onDeleteProduction: deleteProduction,
-        onSaveAvatar: isManager ? saveAvatar : null
+        onSaveAvatar: isManager ? saveAvatar : null,
+        ytdBaselines: ytdBaselines
       }),
       view === "manager" && isManager && h(ManagerView, {
         date: today, roster: roster, activeRoster: activeRoster, teamEntries: teamEntries, loading: teamLoading, onRefresh: loadTeamData,
@@ -11711,6 +11914,7 @@ function App() {
         awardProgress: awardProgress,
         coachingStats: coachingStats,
         avatars: avatars, onSaveAvatar: saveAvatar,
+        ytdBaselines: ytdBaselines, onSaveBaseline: saveBaseline,
         route: route, navigate: navigate, closeSheet: closeSheet,
         onAddManagerSubmission: function(advisorCode, serial, clientName, amount, nbAc, submittedDate, settledDate) {
           return addManagerSubmission(advisorCode, serial, clientName, amount, nbAc, submittedDate, settledDate);
