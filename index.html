@@ -795,15 +795,35 @@ var SL_MDRT = [
 //   "validation" — Total AC,           Jan 1 – Dec 31
 //   "macaulay"   — settled lives + NB AC, Jul 1 – Jun 30
 //   "mdrt"       — NB AC,              Jan 1 – Dec 31 ).
+// Patch 34: a fourth kind,
+//   "medallion"  — settled lives + NB AC, current calendar quarter.
+// It comes back as .q and replaces the plain production-log quarter
+// tally everywhere Medallion is shown (Advisor Medallion, Unit
+// Medallion, the green status ring).
+// Patch 35: one Medallion total is kept PER QUARTER, and Macaulay lives
+// are no longer entered on their own:
+//   Macaulay lives = sum of the lives of each quarter in the Macaulay
+//   cycle (Jul–Sep, Oct–Dec, Jan–Mar, Apr–Jun), where a quarter's lives
+//   = its Medallion total + lives logged after that total's as-of date
+//   inside the quarter (or just the lives logged, if no total is saved).
+// Macaulay NB AC is unchanged (its own total, Jul 1 to date).
 // Each figure = its saved total (if its as-of falls in the current
 // window) + production logged AFTER that as-of date inside the window.
 // With no saved total, it's just the production logged in the window.
 function slStandings(prod, totals, today) {
-  var yFrom = today.slice(0, 4) + "-01-01", lFrom = slMacaulayYearStart(today);
+  var yFrom = today.slice(0, 4) + "-01-01", lFrom = slMacaulayYearStart(today), qFrom = slQuarterStart(today);
   var from = { validation: yFrom, macaulay: lFrom, mdrt: yFrom };
-  var base = {}, codes = {};
+  var quarters = slMacaulayQuarters(today);
+  var base = {}, baseQ = {}, codes = {};
   (totals || []).forEach(function (t) {
     var d = String(t.as_of || "").slice(0, 10);
+    if (t.kind === "medallion") {
+      // one per quarter, filed under the quarter its as-of date falls in
+      if (!d || d > today || d < lFrom) return;
+      baseQ[t.advisor_code + "|" + slQuarterStart(d)] = { lives: Number(t.lives || 0), nbac: Number(t.amount || 0), asOf: d };
+      codes[t.advisor_code] = true;
+      return;
+    }
     if (!from[t.kind] || !d || d > today || d < from[t.kind]) return;
     base[t.advisor_code + "|" + t.kind] = { lives: Number(t.lives || 0), nbac: Number(t.amount || 0), asOf: d };
     codes[t.advisor_code] = true;
@@ -820,9 +840,23 @@ function slStandings(prod, totals, today) {
     });
     return t;
   }
+  function accQ(code, qs) {
+    var b = baseQ[code + "|" + qs], t = { lives: b ? b.lives : 0, nbac: b ? b.nbac : 0 };
+    (prod || []).forEach(function (r) {
+      if (r.advisor_code !== code) return;
+      var d = r.recorded_date ? String(r.recorded_date).slice(0, 10) : null;
+      if (!d || d > today || slQuarterStart(d) !== qs || (b && d <= b.asOf)) return;
+      t.lives += Number(r.lives || 0);
+      t.nbac += Number(r.nb_ac || 0);
+    });
+    return t;
+  }
   var out = {};
   Object.keys(codes).forEach(function (code) {
-    out[code] = { v: acc(code, "validation"), mac: acc(code, "macaulay"), md: acc(code, "mdrt") };
+    var mac = acc(code, "macaulay");
+    mac.lives = 0;
+    quarters.forEach(function (qs) { mac.lives += accQ(code, qs).lives; });
+    out[code] = { v: acc(code, "validation"), mac: mac, md: acc(code, "mdrt"), q: accQ(code, qFrom) };
   });
   return out;
 }
@@ -906,6 +940,24 @@ function slQuarterLabel(dateStr) {
   return SL_MONTHS[qm - 1] + "\u2013" + SL_MONTHS[qm + 1];
 }
 
+// Patch 35: the Macaulay cycle is four quarters — Jul–Sep and Oct–Dec of
+// one year, Jan–Mar and Apr–Jun of the next. These list the quarters of
+// the current cycle that have started (oldest first).
+function slNextQuarter(qs) {
+  var y = parseInt(qs.slice(0, 4), 10), m = parseInt(qs.slice(5, 7), 10) + 3;
+  if (m > 12) { m -= 12; y += 1; }
+  return y + "-" + (m < 10 ? "0" : "") + m + "-01";
+}
+function slQuarterEnd(qs) {
+  var y = parseInt(qs.slice(0, 4), 10), m = parseInt(qs.slice(5, 7), 10) + 2;
+  return y + "-" + (m < 10 ? "0" : "") + m + "-" + new Date(y, m, 0).getDate();
+}
+function slMacaulayQuarters(today) {
+  var out = [], qs = slMacaulayYearStart(today), cur = slQuarterStart(today);
+  while (qs <= cur && out.length < 4) { out.push(qs); qs = slNextQuarter(qs); }
+  return out;
+}
+
 function slAdvisorTier(t) {
   var tier = null;
   SL_ADVISOR_MEDALLION.forEach(function (x) { if (t.nbac >= x.nbac) tier = x.tier; });
@@ -939,16 +991,16 @@ function SunLifeScoreboard(props) {
   var yFrom = today.slice(0, 4) + "-01-01";
   var prod = props.production || [];
   var month = slTallyLog(prod, monthFrom, today);
-  var quarter = slTallyLog(prod, qFrom, today);
   var year = slStandings(prod, props.baselines || [], today);
-  var zeroStd = { v: { lives: 0, nbac: 0 }, mac: { lives: 0, nbac: 0 }, md: { lives: 0, nbac: 0 } };
+  var zeroStd = { v: { lives: 0, nbac: 0 }, mac: { lives: 0, nbac: 0 }, md: { lives: 0, nbac: 0 }, q: { lives: 0, nbac: 0 } };
   var zero = { lives: 0, nbac: 0 };
   var monthLabel = SL_MONTHS[parseInt(today.slice(5, 7), 10) - 1];
 
   var people = roster.map(function (r) {
     return {
       code: r.code, name: r.name, isMe: r.code === myCode, isManager: !!r.is_manager,
-      m: month[r.code] || zero, q: quarter[r.code] || zero, y: year[r.code] || zeroStd
+      // Patch 34: quarter = Medallion portal total + production logged after it.
+      m: month[r.code] || zero, q: (year[r.code] || zeroStd).q, y: year[r.code] || zeroStd
     };
   });
   var byMonth = people.slice().sort(function (a, b) { return (b.m.nbac - a.m.nbac) || (b.m.lives - a.m.lives); });
@@ -3136,7 +3188,7 @@ function AdvisorView(props) {
     )
     ],
     team: [
-      h(TeamFeed, { production: productionLog, roster: scoreRoster, today: date, myCode: myCode, isManager: viewerIsManager,
+      h(TeamFeed, { production: productionLog, baselines: props.ytdBaselines, roster: scoreRoster, today: date, myCode: myCode, isManager: viewerIsManager,
         avatarByCode: props.avatarByCode, onLog: props.onLogProduction, onDelete: props.onDeleteProduction,
         onSaveAvatar: props.onSaveAvatar }),
       h(SunLifeScoreboard, { production: productionLog, baselines: props.ytdBaselines, roster: scoreRoster, today: date, myCode: myCode, avatarByCode: props.avatarByCode }),
@@ -4429,23 +4481,42 @@ function topTier(awardProgress, advisorCode, awardType) {
 // Patch 31 — YtdBaselineSection (Manager tools): three ways to enter a
 // portal total, each saved on its own with its own as-of date.
 //   Validation  Total AC            Jan 1 to date
-//   Macaulay    settled lives + NB AC Jul 1 to date
+//   Macaulay    NB AC               Jul 1 to date (lives: see Medallion, Patch 35)
 //   MDRT        NB AC               Jan 1 to date
+//   Medallion   settled lives + NB AC this quarter to date (Patch 34);
+//               one total per quarter, and earlier quarters of the
+//               Macaulay cycle can be entered as lives only (Patch 35)
 // Saving again replaces that advisor's previous figure for that kind.
 // =====================================================================
 var YTD_KINDS = [
   { key: "validation", label: "Validation", from: "Jan 1", fields: [{ k: "amount", label: "Total AC (Jan 1 to date, \u20b1)", dec: true }],
     note: "Total AC from January 1. Measured against \u20b1180K, Jan\u2013Dec." },
-  { key: "macaulay", label: "Macaulay", from: "Jul 1", fields: [{ k: "lives", label: "Settled lives (Jul 1 to date)", dec: false }, { k: "amount", label: "NB AC (Jul 1 to date, \u20b1)", dec: true }],
-    note: "Settled lives and NB AC from July 1. Macaulay year runs Jul\u2013Jun." },
+  { key: "macaulay", label: "Macaulay", from: "Jul 1", fields: [{ k: "amount", label: "NB AC (Jul 1 to date, \u20b1)", dec: true }],
+    note: "NB AC from July 1. Macaulay lives are added up from the Medallion quarters (Jul\u2013Jun), so enter lives under Medallion." },
   { key: "mdrt", label: "MDRT", from: "Jan 1", fields: [{ k: "amount", label: "NB AC (Jan 1 to date, \u20b1)", dec: true }],
-    note: "NB AC from January 1. MDRT year runs Jan\u2013Dec." }
+    note: "NB AC from January 1. MDRT year runs Jan\u2013Dec." },
+  { key: "medallion", label: "Medallion", from: "quarter start", fields: [{ k: "lives", label: "Settled lives (quarter to date)", dec: false }, { k: "amount", label: "NB AC (quarter to date, \u20b1)", dec: true }],
+    note: "Settled lives and NB AC this quarter. Medallion resets every quarter." }
 ];
+// Patch 34: first day of the window each kind is measured in.
+function ytdWindowFrom(kind, today) {
+  if (kind === "macaulay") return slMacaulayYearStart(today);
+  if (kind === "medallion") return slQuarterStart(today);
+  return today.slice(0, 4) + "-01-01";
+}
+// Patch 35: which period a saved total belongs to (the window its as-of
+// date falls in) — a quarter for Medallion, a year for the rest.
+function ytdPeriodOf(kind, asOf) {
+  var d = String(asOf || "").slice(0, 10);
+  return d ? ytdWindowFrom(kind, d) : "";
+}
 
 function YtdBaselineSection(props) {
   var roster = props.roster || [], totals = props.baselines || [], today = props.today;
   var kindState = useState("validation"); var kind = kindState[0], setKind = kindState[1];
   var codeState = useState(""); var code = codeState[0], setCode = codeState[1];
+  // Patch 35: which quarter a Medallion total is for (default: this quarter).
+  var qState = useState(slQuarterStart(today)); var qSel = qState[0], setQSel = qState[1];
   var livesState = useState(""); var lives = livesState[0], setLives = livesState[1];
   var amtState = useState(""); var amt = amtState[0], setAmt = amtState[1];
   var asOfState = useState(today); var asOf = asOfState[0], setAsOf = asOfState[1];
@@ -4454,45 +4525,62 @@ function YtdBaselineSection(props) {
   var busyState = useState(false); var busy = busyState[0], setBusy = busyState[1];
   var inp = { background: COLORS.line, color: COLORS.ink, border: "none" };
   var K = YTD_KINDS.filter(function (x) { return x.key === kind; })[0];
-  var windowFrom = kind === "macaulay" ? slMacaulayYearStart(today) : today.slice(0, 4) + "-01-01";
+  var quarters = slMacaulayQuarters(today), curQ = slQuarterStart(today);
+  var isMed = kind === "medallion";
+  var pastQ = isMed && qSel !== curQ;   // an earlier quarter of the Macaulay cycle
+  var windowFrom = isMed ? qSel : ytdWindowFrom(kind, today);
+  var windowTo = pastQ ? slQuarterEnd(qSel) : today;
+  // A closed quarter only needs its lives (that is all Macaulay uses).
+  var fields = pastQ ? K.fields.filter(function (f) { return f.k === "lives"; }) : K.fields;
+  var hasLives = fields.some(function (f) { return f.k === "lives"; });
+  var hasAmount = fields.some(function (f) { return f.k === "amount"; });
+  var note = !isMed ? K.note
+    : pastQ ? "Final settled lives for " + slQuarterLabel(qSel) + ". They count toward Macaulay lives."
+    : "Settled lives and NB AC from " + shortDate(windowFrom) + " to date. The lives also count toward Macaulay.";
   var byCode = {};
-  totals.forEach(function (t) { if (t.kind === kind) byCode[t.advisor_code] = t; });
+  totals.forEach(function (t) { if (t.kind === kind && ytdPeriodOf(kind, t.as_of) === windowFrom) byCode[t.advisor_code] = t; });
 
-  var load = function (c, k) {
+  var load = function (c, k, period) {
     var row = null;
-    totals.forEach(function (t) { if (t.kind === k && t.advisor_code === c) row = t; });
+    // Patch 34/35: only the total for the period being edited is pre-filled,
+    // so a figure from another quarter or year can't be re-saved by accident.
+    totals.forEach(function (t) { if (t.kind === k && t.advisor_code === c && ytdPeriodOf(k, t.as_of) === period) row = t; });
     setLives(row && row.lives != null ? fmtNumInput(row.lives, false) : "");
     setAmt(row && row.amount != null ? fmtNumInput(Number(row.amount), true) : "");
     setAsOf(today); setErr(null); setOk(null);
   };
-  var pickKind = function (k) { setKind(k); if (code) load(code, k); else { setErr(null); setOk(null); } };
-  var pick = function (c) { setCode(c); load(c, kind); };
+  var pickKind = function (k) { setKind(k); if (code) load(code, k, k === "medallion" ? qSel : ytdWindowFrom(k, today)); else { setErr(null); setOk(null); } };
+  var pick = function (c) { setCode(c); load(c, kind, windowFrom); };
+  var pickQuarter = function (q) { setQSel(q); if (code) load(code, kind, q); else { setErr(null); setOk(null); } };
 
   var save = async function () {
-    var needLives = kind === "macaulay";
-    var lv = needLives ? parseNumInput(lives) : 0, am = parseNumInput(amt);
+    var needLives = hasLives;
+    // A closed quarter is saved as of its last day and keeps any NB AC already on file for it.
+    var prev = byCode[code];
+    var when = pastQ ? windowTo : asOf;
+    var lv = needLives ? parseNumInput(lives) : 0, am = hasAmount ? parseNumInput(amt) : (prev ? Number(prev.amount || 0) : 0);
     if (!code) { setErr("Choose an advisor."); return; }
     if (needLives && (lives === "" || !(lv >= 0) || Math.floor(lv) !== lv)) { setErr("Enter settled lives as a whole number."); return; }
-    if (amt === "" || !(am >= 0) || !isFinite(am)) { setErr("Enter the amount in pesos."); return; }
-    if (!asOf || asOf > today || asOf < windowFrom) { setErr("As-of date must be between " + shortDate(windowFrom) + " and today."); return; }
+    if (hasAmount && (amt === "" || !(am >= 0) || !isFinite(am))) { setErr("Enter the amount in pesos."); return; }
+    if (!when || when > windowTo || when < windowFrom) { setErr("As-of date must be between " + shortDate(windowFrom) + " and today."); return; }
     setErr(null); setBusy(true);
-    var res = await props.onSave(code, kind, lv, Math.round(am * 100) / 100, asOf);
+    var res = await props.onSave(code, kind, lv, Math.round(am * 100) / 100, when);
     setBusy(false);
     if (!res || !res.ok) { setErr((res && res.message) || "Couldn't save. Try again."); return; }
-    setOk(K.label + " total saved.");
+    setOk(K.label + (isMed ? " total for " + slQuarterLabel(qSel) : " total") + " saved.");
   };
 
   function field(f) {
     var isLives = f.k === "lives";
     return h("div", { key: f.k, className: "flex-1" },
-      h("div", { style: { color: COLORS.slate }, className: "text-[11px] mb-1" }, f.label),
+      h("div", { style: { color: COLORS.slate }, className: "text-[11px] mb-1" }, pastQ && isLives ? "Settled lives (" + slQuarterLabel(qSel) + ")" : f.label),
       h("input", { type: "text", inputMode: f.dec ? "decimal" : "numeric", value: isLives ? lives : amt, placeholder: "0",
         onChange: function (ev) { var v = fmtNumInput(ev.target.value, f.dec); if (isLives) setLives(v); else setAmt(v); setErr(null); setOk(null); },
         style: inp, className: "w-full px-3 py-3 rounded-lg text-[15px] outline-none font-mono" }));
   }
 
   return h("div", null,
-    h(SectionTitle, { label: "Year-to-date totals (Sun Life portal)" }),
+    h(SectionTitle, { label: "Sun Life portal totals" }),
     h("div", { style: { color: COLORS.slate }, className: "text-[11px] leading-relaxed mb-2.5" },
       "Pick what you're entering, then copy the figure from the Sun Life portal. Production you log after the as-of date is added on top."),
     h("div", { style: { background: COLORS.card, borderColor: COLORS.line }, className: "rounded-2xl border p-4 space-y-3" },
@@ -4501,31 +4589,39 @@ function YtdBaselineSection(props) {
           var on = x.key === kind;
           return h("button", { key: x.key, type: "button", onClick: function () { pickKind(x.key); },
             style: { background: on ? COLORS.brass : "transparent", color: on ? "#fff" : COLORS.slate },
-            className: "flex-1 py-2 rounded-md text-[13px] font-semibold" }, x.label);
+            className: "flex-1 min-w-0 py-2 rounded-md text-[12px] font-semibold" }, x.label);
         })),
-      h("div", { style: { color: COLORS.slate }, className: "text-[12px]" }, K.note),
+      // Patch 35: Medallion is kept per quarter of the Macaulay cycle.
+      isMed && quarters.length > 1 && h("div", { className: "flex gap-1.5" },
+        quarters.map(function (q) {
+          var on = q === qSel;
+          return h("button", { key: q, type: "button", "aria-pressed": on, onClick: function () { pickQuarter(q); },
+            style: { borderColor: on ? COLORS.brass : COLORS.line, color: on ? COLORS.brass : COLORS.slate },
+            className: "flex-1 min-w-0 py-1.5 rounded-full border text-[12px] font-semibold" }, slQuarterLabel(q));
+        })),
+      h("div", { style: { color: COLORS.slate }, className: "text-[12px]" }, note),
       h("select", { value: code, onChange: function (ev) { pick(ev.target.value); }, style: inp, className: "w-full px-3 py-3 rounded-lg text-[15px] outline-none" },
         h("option", { value: "" }, "Choose advisor\u2026"),
         roster.map(function (r) { return h("option", { key: r.code, value: r.code }, r.name); })),
-      h("div", { className: "flex gap-2" }, K.fields.map(field)),
-      h("div", null,
+      h("div", { className: "flex gap-2" }, fields.map(field)),
+      !pastQ && h("div", null,
         h("div", { style: { color: COLORS.slate }, className: "text-[11px] mb-1" }, "As of"),
         h("input", { type: "date", value: asOf, min: windowFrom, max: today, onChange: function (ev) { setAsOf(ev.target.value); setErr(null); setOk(null); }, style: inp, className: "w-full px-3 py-3 rounded-lg text-[15px] outline-none font-mono" })),
       err && h("div", { style: { color: COLORS.rust }, className: "text-[13px]" }, err),
       ok && h("div", { style: { color: COLORS.good }, className: "text-[13px]" }, ok),
       h("button", { type: "button", onClick: save, disabled: busy, style: { background: COLORS.brass, color: "#fff", opacity: busy ? 0.6 : 1 },
         className: "w-full py-3 rounded-lg font-semibold text-[15px]" }, busy ? "Saving\u2026" : "Save " + K.label + " total")),
-    h("div", { style: { color: COLORS.slate }, className: "text-[11px] mt-3 mb-1.5" }, K.label + " totals on file"),
+    h("div", { style: { color: COLORS.slate }, className: "text-[11px] mt-3 mb-1.5" }, K.label + " totals on file" + (isMed ? " \u00b7 " + slQuarterLabel(qSel) : "")),
     h("div", { style: { background: COLORS.card, borderColor: COLORS.line }, className: "rounded-2xl border divide-y" },
       roster.map(function (r) {
         var t = byCode[r.code];
-        var current = t && String(t.as_of).slice(0, 10) >= windowFrom;
+        var current = !!t;   // byCode already holds only this period's totals
         return h("button", { key: r.code, type: "button", onClick: function () { pick(r.code); try { window.scrollBy({ top: -260, behavior: "smooth" }); } catch (e) {} },
           style: { borderColor: COLORS.line }, className: "w-full px-4 py-2.5 flex items-center justify-between gap-2 text-left" },
           h("span", { style: { color: COLORS.ink }, className: "text-[13px] truncate" }, r.name),
           current
             ? h("span", { style: { color: COLORS.slate }, className: "text-[11px] font-mono shrink-0" },
-                (kind === "macaulay" ? fmtNumInput(t.lives, false) + " lives \u00b7 " : "") + fmtPhp(t.amount) + " \u00b7 " + shortDate(String(t.as_of).slice(0, 10)))
+                (hasLives ? fmtNumInput(t.lives, false) + " lives \u00b7 " : "") + (hasAmount ? fmtPhp(t.amount) + " \u00b7 " : "") + shortDate(String(t.as_of).slice(0, 10)))
             : h("span", { style: { color: COLORS.rust }, className: "text-[11px] shrink-0" }, "Not entered"));
       })));
 }
@@ -6242,7 +6338,7 @@ function isOneSignalConfigured() {
 }
  
 var APP_NAME = "Unit App";
-var APP_VERSION = "5.13.0-patch33";
+var APP_VERSION = "5.13.0-patch35";
  
 function isSupabaseConfigured() {
   return SUPABASE_URL.indexOf("YOUR-PROJECT") === -1 && SUPABASE_ANON_KEY.indexOf("YOUR-ANON") === -1;
@@ -9066,7 +9162,9 @@ function TeamFeed(props) {
   var openState = useState(null); var composing = openState[0], setComposing = openState[1];
   if (!today) return null;
   var month = slTallyLog(rows, startOfMonth(today), today);
-  var quarter = slTallyLog(rows, slQuarterStart(today), today);
+  // Patch 34: quarter = Medallion portal total + production logged after it.
+  var quarter = {}, std = slStandings(rows, props.baselines || [], today);
+  Object.keys(std).forEach(function (c) { quarter[c] = std[c].q; });
   // Patch 22: ring colour = status (not progress).
   //   green  Rise to 3-30 met this month, or any Medallion tier this quarter
   //   orange some production logged this month
@@ -10931,7 +11029,8 @@ function App() {
         if (err === "invalid_values") return { ok: false, message: "Check the numbers and the as-of date." };
         return { ok: false, message: "Couldn't save. Try again." };
       }
-      if (d.row) setYtdBaselines(function (prev) { return prev.filter(function (b) { return !(b.advisor_code === d.row.advisor_code && b.kind === d.row.kind); }).concat([d.row]); });
+      // Patch 35: a save replaces only the total for the same period (quarter/year).
+      if (d.row) setYtdBaselines(function (prev) { return prev.filter(function (b) { return !(b.advisor_code === d.row.advisor_code && b.kind === d.row.kind && ytdPeriodOf(b.kind, b.as_of) === ytdPeriodOf(d.row.kind, d.row.as_of)); }).concat([d.row]); });
       logEvent("ytd_total_saved", advisorCode, { kind: kind, lives: lives, amount: amount, as_of: asOf });
       return { ok: true };
     } catch (e) { return { ok: false, message: "Cancelled." }; }
