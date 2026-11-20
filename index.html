@@ -1022,12 +1022,14 @@ function SunLifeScoreboard(props) {
   };
   // Patch 25: photo before every name on the scoreboard.
   var avatars = props.avatarByCode || {};
-  var nameCell = function (p) {
+  // Patch 33: forceGood lets a card turn the ring green on its own goal
+  // (the 180K validation card passes true once the advisor is validated).
+  var nameCell = function (p, forceGood) {
     return [
       // Patch 28: same status ring as the Team tab photos —
       // red no production this month · orange some · green 3-30 or Medallion.
       (function () {
-        var ringColor = (slRiseMet(p.m) || slAdvisorTier(p.q)) ? COLORS.good
+        var ringColor = (forceGood || slRiseMet(p.m) || slAdvisorTier(p.q)) ? COLORS.good
           : (p.m.lives > 0 || p.m.nbac > 0) ? SL_RING_ORANGE : COLORS.rust;
         return h("span", { key: "av", style: { display: "inline-block", flexShrink: 0, borderRadius: "50%", padding: "2px", background: ringColor } },
           h("span", { style: { display: "block", borderRadius: "50%", padding: "1.5px", background: COLORS.card } },
@@ -1104,7 +1106,7 @@ function SunLifeScoreboard(props) {
             // Patch 32: show how much Total AC is still needed to validate.
             var gap = Math.max(0, SL_VALIDATION_NBAC - p.y.v.nbac);
             return h("div", { key: p.code, style: { display: "grid", gridTemplateColumns: "minmax(0,1.4fr) minmax(0,0.6fr) 96px", gap: "8px", alignItems: "center" }, className: "text-[12px]" },
-              h("span", { className: "min-w-0 flex items-center gap-2" }, nameCell(p)),
+              h("span", { className: "min-w-0 flex items-center gap-2" }, nameCell(p, done)),
               slBar((p.y.v.nbac / SL_VALIDATION_NBAC) * 100, done ? COLORS.good : COLORS.brass),
               done
                 ? h("span", { style: { color: COLORS.good }, className: "font-mono text-right" }, "Validated")
